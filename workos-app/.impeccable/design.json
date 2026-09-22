@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-12T00:00:00Z",
+  "title": "Design System: Kinetic Work OS",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Electric Indigo (deep)", "canonical": "#4744e5", "tonalRamp": ["#0e0d3f", "#1c1a7a", "#2c24ce", "#4744e5", "#6161ff", "#8f8fff", "#c1c1ff", "#e1dfff"] },
+      "primary-container": { "role": "primary", "displayName": "Electric Indigo", "canonical": "#6161ff", "tonalRamp": ["#0e0d3f", "#1c1a7a", "#2c24ce", "#4744e5", "#6161ff", "#8f8fff", "#c1c1ff", "#e1dfff"] },
+      "secondary": { "role": "secondary", "displayName": "Cool Slate", "canonical": "#5a5c79", "tonalRamp": ["#161a32", "#2c2f4d", "#424560", "#5a5c79", "#7d7f9a", "#a3a4bd", "#c2c4e5", "#dfe0ff"] },
+      "tertiary": { "role": "tertiary", "displayName": "Signal Green (reserved, unused)", "canonical": "#006d3b", "tonalRamp": ["#00210e", "#00522b", "#006d3b", "#00894b", "#39e186", "#5effa0", "#9bf5c5", "#d6ffe6"] },
+      "status-done": { "role": "status", "displayName": "Emerald Done", "canonical": "#00ca72", "tonalRamp": ["#00381f", "#005c34", "#008049", "#00ca72", "#4de29c", "#8aefc0", "#c2f7de", "#e6fcf1"] },
+      "status-working": { "role": "status", "displayName": "Amber Working", "canonical": "#fdab3d", "tonalRamp": ["#4a2c00", "#7a4900", "#b06e00", "#fdab3d", "#fec570", "#ffdca3", "#ffedcf", "#fff8ec"] },
+      "status-stuck": { "role": "status", "displayName": "Signal Red Stuck", "canonical": "#e2445c", "tonalRamp": ["#4a0b14", "#7d1220", "#b21b2e", "#e2445c", "#ec87a3", "#f2a3b0", "#f8ccd4", "#fceef0"] },
+      "status-empty": { "role": "status", "displayName": "Neutral Empty", "canonical": "#c4c4c4", "tonalRamp": ["#2b2b2b", "#4d4d4d", "#707070", "#939393", "#c4c4c4", "#dadada", "#ececec", "#f7f7f7"] },
+      "surface-sidebar": { "role": "neutral", "displayName": "Midnight Sidebar", "canonical": "#292f4c", "tonalRamp": ["#0a0c16", "#14172a", "#1f223d", "#292f4c", "#454b6b", "#6c7191", "#9fa2ba", "#d6d8e5"] },
+      "background": { "role": "neutral", "displayName": "Faint Violet Canvas", "canonical": "#fbf8ff", "tonalRamp": ["#191b29", "#33354a", "#5a5c79", "#8f8fa8", "#c1c1d6", "#e1e1f5", "#f4f2ff", "#fbf8ff"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Dashboard KPI tile values only." },
+      "headline-lg": { "displayName": "Headline Large", "purpose": "Board title." },
+      "headline-sm": { "displayName": "Headline Small", "purpose": "Active tab label, Kanban column headers, card titles." },
+      "data-cell": { "displayName": "Data Cell", "purpose": "Dense tabular values (dates, counts) with tabular-nums." },
+      "label-sm": { "displayName": "Label Small", "purpose": "Uppercase column headers and status-pill text." }
+    },
+    "shadows": [
+      { "name": "ambient-card", "value": "0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03)", "purpose": "Resting elevation for Kanban cards, Dashboard tiles, Table group wrapper." },
+      { "name": "hover-lift", "value": "shadow-md (Tailwind default)", "purpose": "Hover response on cards and KPI tiles; never present at rest." },
+      { "name": "floating-chrome", "value": "0 1px 8px rgba(0,0,0,0.04)", "purpose": "Fixed TopBar and Sidebar panels." },
+      { "name": "toolbar-chrome", "value": "0 1px 4px rgba(0,0,0,0.02)", "purpose": "BoardToolbar and Timeline footer bars." },
+      { "name": "elevated-pill", "value": "shadow-xl (Tailwind default)", "purpose": "Floating 'Board synced' status pill on Kanban." }
+    ],
+    "motion": [
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Default easing for every state transition: drag, collapse, tab switch, count-up, status-pill tap." },
+      { "name": "ease-in-out-quart", "value": "cubic-bezier(0.76, 0, 0.24, 1)", "purpose": "Reserved token in globals.css; not yet exercised by a shipped component." }
+    ],
+    "breakpoints": [
+      { "name": "md", "value": "768px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button (split)",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "New Task split button: primary action joined to a chevron trigger, used in the board toolbar.",
+      "html": "<div class=\"ds-btn-split\"><button class=\"ds-btn-primary\">+ New Task</button><button class=\"ds-btn-chevron\">▾</button></div>",
+      "css": ".ds-btn-split { display: inline-flex; border-radius: 8px; overflow: hidden; } .ds-btn-primary { background: #6161ff; color: #fff; font-size: 12px; font-weight: 500; line-height: 16px; padding: 6px 12px; border: none; display: flex; align-items: center; gap: 6px; transition: background 0.15s cubic-bezier(0.16,1,0.3,1); } .ds-btn-primary:hover { background: #4744e5; } .ds-btn-primary:focus-visible { outline: 2px solid #6161ff; outline-offset: 2px; } .ds-btn-chevron { background: #6161ff; color: #fff; padding: 6px 8px; border: none; transition: background 0.15s cubic-bezier(0.16,1,0.3,1); } .ds-btn-chevron:hover { background: #4744e5; }"
+    },
+    {
+      "name": "Status Pill (full)",
+      "kind": "chip",
+      "refersTo": "status-pill-working",
+      "description": "Table-cell-filling status control; click cycles to the next status.",
+      "html": "<button class=\"ds-status-pill\">Working on it</button>",
+      "css": ".ds-status-pill { width: 100%; height: 32px; border-radius: 4px; background: #fdab3d; color: #fff; font-size: 12px; font-weight: 500; letter-spacing: 0.02em; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03); transition: transform 0.15s cubic-bezier(0.16,1,0.3,1); } .ds-status-pill:active { transform: scale(0.95); } .ds-status-pill:focus-visible { outline: 2px solid #6161ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Pill (chip)",
+      "kind": "chip",
+      "refersTo": "status-pill-done",
+      "description": "Inline rounded status badge used on Gantt task panes and mobile cards.",
+      "html": "<span class=\"ds-status-chip\">Done</span>",
+      "css": ".ds-status-chip { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 8px; background: #00ca72; color: #fff; font-size: 12px; font-weight: 500; letter-spacing: 0.02em; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }"
+    },
+    {
+      "name": "Kanban Card",
+      "kind": "card",
+      "refersTo": "kanban-card",
+      "description": "Draggable task card; shares layoutId across columns for a physical drag transition.",
+      "html": "<div class=\"ds-kanban-card\"><div class=\"ds-kanban-card-top\"><span class=\"ds-tag\">Ops</span><span class=\"ds-pct\">50%</span></div><h3 class=\"ds-kanban-title\">Refine objectives</h3><div class=\"ds-kanban-progress\"><div class=\"ds-kanban-progress-fill\" style=\"width:50%\"></div></div></div>",
+      "css": ".ds-kanban-card { background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 8px; transition: box-shadow 0.25s cubic-bezier(0.16,1,0.3,1), transform 0.25s cubic-bezier(0.16,1,0.3,1); cursor: grab; } .ds-kanban-card:hover { box-shadow: 0 4px 14px rgba(24,27,52,0.08); transform: translateY(-2px); } .ds-kanban-card-top { display: flex; align-items: center; justify-content: space-between; } .ds-tag { background: #dcddff; color: #5e617d; font-size: 11px; padding: 2px 10px; border-radius: 9999px; } .ds-pct { color: #fdab3d; font-size: 12px; font-weight: 600; } .ds-kanban-title { font-size: 16px; font-weight: 600; line-height: 22px; color: #191b29; } .ds-kanban-progress { width: 100%; height: 8px; background: #edecff; border-radius: 9999px; overflow: hidden; } .ds-kanban-progress-fill { height: 100%; background: #fdab3d; border-radius: 9999px; }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "Top bar workspace search field; focus applies the primary glow ring.",
+      "html": "<div class=\"ds-search\"><input class=\"ds-search-input\" placeholder=\"Search workspace, items, updates...\" /></div>",
+      "css": ".ds-search-input { width: 256px; padding: 4px 12px 4px 32px; background: #f6f7fb; color: #191b29; font-size: 13px; border-radius: 8px; border: none; transition: background 0.15s, box-shadow 0.15s; } .ds-search-input::placeholder { color: #767587; } .ds-search-input:focus { outline: none; background: #fff; box-shadow: 0 0 0 2px rgba(97,97,255,0.3); }"
+    },
+    {
+      "name": "Avatar",
+      "kind": "custom",
+      "refersTo": "avatar",
+      "description": "Initials-based circular avatar with a canvas-colored separation ring.",
+      "html": "<div class=\"ds-avatar\">SC</div>",
+      "css": ".ds-avatar { width: 28px; height: 28px; border-radius: 9999px; background: #dcddff; color: #4744e5; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.05); box-sizing: border-box; border: 1px solid #fff; }"
+    },
+    {
+      "name": "View Switcher Tab",
+      "kind": "nav",
+      "refersTo": "board-tab",
+      "description": "Active tab carries a shared-layout sliding underline (layoutId) rather than a static border.",
+      "html": "<div class=\"ds-tabs\"><button class=\"ds-tab ds-tab-active\">Main Table<span class=\"ds-tab-underline\"></span></button><button class=\"ds-tab\">Timeline</button></div>",
+      "css": ".ds-tabs { display: flex; gap: 24px; } .ds-tab { position: relative; padding-bottom: 8px; background: none; border: none; color: #464555; font-size: 13px; transition: color 0.2s; } .ds-tab:hover { color: #191b29; } .ds-tab-active { color: #4744e5; font-size: 16px; font-weight: 600; } .ds-tab-underline { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #4744e5; border-radius: 9999px; }"
+    },
+    {
+      "name": "Icon Rail",
+      "kind": "nav",
+      "refersTo": "icon-rail",
+      "description": "The system's one dark surface: fixed 48px icon-only workspace rail.",
+      "html": "<aside class=\"ds-rail\"><div class=\"ds-rail-logo\">▦</div><button class=\"ds-rail-btn\">◧</button></aside>",
+      "css": ".ds-rail { width: 48px; background: #292f4c; display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 12px; box-shadow: 0 1px 8px rgba(0,0,0,0.08); } .ds-rail-logo { width: 32px; height: 32px; border-radius: 8px; background: #4744e5; color: #fff; display: flex; align-items: center; justify-content: center; } .ds-rail-btn { width: 36px; height: 36px; border-radius: 8px; background: none; border: none; color: #c7c4d8; transition: background 0.15s, color 0.15s; } .ds-rail-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Kinetic Work OS",
+    "overview": "This is a modern-corporate productivity system built to carry a lot of simultaneous state — status, ownership, priority, timeline, capacity — without visual fatigue. The palette stays almost entirely neutral (near-white canvases, cool-violet-tinted surfaces) so that the one electric-indigo accent and the four semantic status colors (done/working/stuck/empty) read instantly against it. Density is high by design: 36–44px table rows, 13px data cells, 11px uppercase labels, but a consistent 4px/8px spatial rhythm keeps that density legible rather than cramped. The system was inherited exactly from a pre-approved Stitch export (\"Kinetic Work OS,\" stitch-export/code/design-system.md) and ported verbatim into Tailwind v4 @theme tokens — colors, the full named type ramp, radii, and spacing all carry the original names and values unchanged. What this build adds on top is a motion layer (motion, expo-out easing cubic-bezier(0.16, 1, 0.3, 1)) that makes the inherited system feel alive: shared-layout tab underlines, layoutId-based Kanban drag transitions, spring-feeling status-pill presses, and orchestrated collapse/expand — motion is applied to existing surfaces, never used to invent new ones.",
+    "keyCharacteristics": [
+      "Ultra-clean white/near-white canvases with a cool violet-gray surface family for tonal layering instead of borders alone.",
+      "One accent (primary-container #6161FF / primary #4744E5) reserved for active state, primary actions, and selection — never decorative fill.",
+      "Four solid, high-recognition semantic status colors carry all task-state meaning across all four views identically.",
+      "Every state transition animates on the same expo-out curve; motion is structural, not decorative.",
+      "Light mode only — no dark theme exists anywhere in the tokens or components."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "primary/primary-container indigo appears only on the active view tab, primary actions, and progress/selection states. It is never used as a background fill for informational content — that role belongs to the surface-container scale.", "section": "colors" },
+      { "name": "The Solid Status Rule", "body": "status-done/working/stuck/empty are always solid fills with white (or near-white) text, never tinted or outlined, so a status reads at a glance across Table, Kanban, Timeline, and Dashboard without re-learning per view.", "section": "colors" },
+      { "name": "The One-Family Rule", "body": "Inter is the only font in the system, at every size. Hierarchy is carried entirely by weight, size, and letter-spacing — never by introducing a second typeface.", "section": "typography" },
+      { "name": "The Ambient-Only Rule", "body": "Shadows are always soft and low-opacity, sized to communicate stacking order (grid < card < fixed chrome < floating pill), never used for graphic/offset effect. No hard-edged or neobrutalist shadow exists in this world; introducing one would be a foreign device, not a system extension.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the accent (primary/primary-container) reserved for active/selected/primary-action state only; every other interactive surface rests in the neutral/surface-container scale.",
+      "Do use solid semantic status colors (status-done/working/stuck/empty) with white text for any state indicator — never a tinted/outlined variant for the same meaning.",
+      "Do animate state transitions (status change, drag, tab switch, collapse, count-up) on the shared expo-out curve (cubic-bezier(0.16, 1, 0.3, 1)); a transition without this curve reads as foreign to the system.",
+      "Do use layoutId-based shared-element transitions for anything that moves between two visual containers (Kanban drag, tab underline, sidebar hover) rather than crossfading.",
+      "Do reserve rounded-full exclusively for avatars, status chips, and count/pill badges; everything else uses sm/lg/xl per its structural role."
+    ],
+    "donts": [
+      "Don't introduce a second typeface. Inter carries the entire hierarchy through weight and size alone.",
+      "Don't use hard-offset or neobrutalist-style shadows. Every shadow in this system is a soft, low-opacity ambient blur; a heavy offset shadow would be a foreign device in this world.",
+      "Don't add a dark-mode variant. The system is confirmed light-mode-only at the token level (html { color-scheme: light }, no dark media query) and at the brand-commitment level.",
+      "Don't treat a single-use inline shadow or arbitrary pixel value as a token candidate — this file documents only values reused across two or more components."
+    ]
+  }
+}
