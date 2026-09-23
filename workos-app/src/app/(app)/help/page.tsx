@@ -41,7 +41,7 @@ export default function HelpPage() {
   return (
     <AppShell>
       <main className="w-full pt-14 min-h-screen">
-        <div className="px-space-md md:px-space-xl py-space-lg max-w-3xl">
+        <div className="px-space-md md:px-space-xl py-space-lg max-w-3xl mx-auto">
           <PageHeader title="Help & Support" description="Answers to common questions, and how to reach us." />
 
           <div className="relative mb-space-lg">

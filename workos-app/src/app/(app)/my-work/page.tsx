@@ -34,7 +34,7 @@ export default function MyWorkPage() {
   return (
     <AppShell>
       <main className="w-full pt-14 min-h-screen">
-        <div className="px-space-md md:px-space-xl py-space-lg max-w-5xl">
+        <div className="px-space-md md:px-space-xl py-space-lg max-w-5xl mx-auto">
           <PageHeader
             title="My Work"
             description={`Everything assigned to ${user?.name ?? "you"} across all boards.`}

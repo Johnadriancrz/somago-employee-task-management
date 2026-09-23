@@ -70,7 +70,7 @@ export default function AdminPage() {
             <ShieldCheck size={18} />
           </div>
           <div>
-            <h1 className="text-headline-sm text-on-surface leading-tight">WorkOS Admin</h1>
+            <h1 className="text-headline-sm text-on-surface leading-tight">SomagoOS Admin</h1>
             <p className="text-caption text-secondary">{admin?.email}</p>
           </div>
         </div>

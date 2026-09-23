@@ -12,6 +12,7 @@ import {
   Settings,
   MessageCircle,
   Clock,
+  FileSpreadsheet,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const TOP_ITEMS = [
   { icon: UploadCloud, label: "My Work", href: "/my-work" },
   { icon: MessageCircle, label: "Chat", href: "/chat" },
   { icon: Clock, label: "Time Clock", href: "/time-clock" },
+  { icon: FileSpreadsheet, label: "Documents", href: "/documents" },
   { icon: BarChart3, label: "Reports", href: "/dashboards" },
   { icon: Users, label: "Members", href: "/members" },
 ];
@@ -38,7 +40,7 @@ export function IconRail() {
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-full ${expanded ? "w-56" : "w-12"} bg-surface-sidebar z-50 flex flex-col justify-between py-space-md shadow-[0_1px_8px_rgba(0,0,0,0.08)] transition-[width] duration-200 ease-out overflow-hidden`}
+      className={`fixed left-0 top-0 h-full ${expanded ? "w-56" : "w-12"} bg-[radial-gradient(140%_100%_at_0%_0%,rgba(255,255,255,0.18),transparent_55%),linear-gradient(to_bottom,var(--color-primary),var(--color-surface-sidebar))] z-50 flex flex-col justify-between py-space-md shadow-[0_1px_8px_rgba(0,0,0,0.08)] transition-[width] duration-200 ease-out overflow-hidden`}
     >
       <div className="flex flex-col gap-space-md w-full px-space-sm">
         <Link

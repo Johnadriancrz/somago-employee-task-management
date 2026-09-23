@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Paperclip, Plus, Trash2 } from "lucide-react";
 import type { Attachment } from "@/lib/types";
+import { FilePreviewSheet } from "@/components/ui/FilePreviewSheet";
 
 /** Data URIs live in the in-memory stub backend — see BACKEND.md for what a real backend swaps this for. */
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -32,6 +33,7 @@ export function FilesPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<Attachment | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = (files: FileList | null) => {
@@ -77,14 +79,14 @@ export function FilesPicker({
             {value.map((a) => (
               <div key={a.id} className="flex items-center gap-2 px-1 py-1 rounded-lg hover:bg-surface-subtle group">
                 <Paperclip size={12} className="text-outline shrink-0" />
-                <a
-                  href={a.dataUrl}
-                  download={a.name}
+                <button
+                  type="button"
+                  onClick={() => setPreviewFile(a)}
                   title={a.name}
-                  className="flex-1 min-w-0 text-label-md text-on-surface truncate hover:text-primary hover:underline"
+                  className="flex-1 min-w-0 text-left text-label-md text-on-surface truncate hover:text-primary hover:underline"
                 >
                   {a.name}
-                </a>
+                </button>
                 <span className="text-caption text-outline shrink-0">{formatBytes(a.size)}</span>
                 {!disabled && (
                   <button
@@ -122,6 +124,7 @@ export function FilesPicker({
           </div>
         </>
       )}
+      <FilePreviewSheet file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>
   );
 }

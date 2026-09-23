@@ -10,9 +10,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "WorkOS — Q3 Project Overview",
+  title: "SomagoOS — Q3 Project Overview",
   description:
-    "WorkOS workspace board: table, kanban, timeline, and dashboard views of the same project.",
+    "SomagoOS workspace board: table, kanban, timeline, and dashboard views of the same project.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -37,7 +37,7 @@ export default function SettingsPage() {
   return (
     <AppShell>
       <main className="w-full pt-14 min-h-screen">
-        <div className="px-space-md md:px-space-xl py-space-lg max-w-2xl flex flex-col gap-space-lg">
+        <div className="px-space-md md:px-space-xl py-space-lg max-w-2xl mx-auto flex flex-col gap-space-lg">
           <PageHeader title="Settings" description="Manage your profile, workspace, and notification preferences." />
 
           <Panel className="flex flex-col gap-space-md">

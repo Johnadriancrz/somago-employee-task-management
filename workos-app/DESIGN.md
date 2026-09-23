@@ -1,15 +1,15 @@
 ---
-name: Kinetic Work OS
-description: Vibrant modern-SaaS productivity system for WorkOS — high-density data views (table, kanban, gantt, dashboard) built on a 60/30/10 palette (white/neutral, brick-red, electric-indigo accent) and kinetic, expo-eased micro-motion.
+name: Kinetic SomagoOS
+description: Vibrant modern-SaaS productivity system for SomagoOS — high-density data views (table, kanban, gantt, dashboard) built on a 60/30/10 palette (white/neutral, logo red, electric-indigo accent) and kinetic, expo-eased micro-motion.
 colors:
-  primary: "#a13f44"
-  primary-container: "#ac484c"
+  primary: "#d81308"
+  primary-container: "#e41b10"
   on-primary-container: "#ffffff"
-  primary-fixed: "#fadad9"
-  on-primary-fixed: "#470007"
-  secondary: "#775454"
-  secondary-container: "#fed5d4"
-  on-secondary-container: "#7b5a59"
+  primary-fixed: "#ffd6d4"
+  on-primary-fixed: "#470400"
+  secondary: "#8b4440"
+  secondary-container: "#ffd5d3"
+  on-secondary-container: "#8e4a46"
   accent: "#6161ff"
   accent-container: "#e3e3ff"
   on-accent-container: "#2b2b8f"
@@ -26,7 +26,7 @@ colors:
   surface-container: "#f5f5f4"
   surface-container-high: "#efedec"
   surface-container-highest: "#e7e5e4"
-  surface-sidebar: "#492626"
+  surface-sidebar: "#5d1612"
   canvas-bg: "#ffffff"
   border-subtle: "#ececeb"
   border-dark: "#d6d3d1"
@@ -155,11 +155,11 @@ components:
 
 This is a modern-corporate productivity system built to carry a lot of simultaneous state — status, ownership, priority, timeline, capacity — without visual fatigue. The palette follows a deliberate 60/30/10 ratio: true white/neutral-gray surfaces dominate (~60%), the muted brick-red brand color is the clear secondary presence (~30% — sidebar, primary actions, tags, selection), and a single electric-indigo accent carries interactive emphasis (~10% — focus rings, active-filter/search highlight). The four semantic status colors (done/working/stuck/empty) sit outside this decorative ratio entirely. Density is high by design: 36–44px table rows, 13px data cells, 11px uppercase labels, but a consistent 4px/8px spatial rhythm keeps that density legible rather than cramped.
 
-The system was inherited from a pre-approved Stitch export ("Kinetic Work OS," `stitch-export/code/design-system.md`) and ported into Tailwind v4 `@theme` tokens — type ramp, radii, and spacing carry the original names and values unchanged. The color ramp was rebalanced from the inherited version to the 60/30/10 ratio above (surfaces moved from a warm blush tint to true neutral gray; a new `accent` token pair was added) per explicit user direction; the brick-red hue family itself, the four semantic status colors, and the type/spacing/radius system are otherwise untouched. What this build adds on top is a motion layer (`motion`, expo-out easing `cubic-bezier(0.16, 1, 0.3, 1)`) that makes the system feel alive: shared-layout tab underlines, `layoutId`-based Kanban drag transitions, spring-feeling status-pill presses, and orchestrated collapse/expand — motion is applied to existing surfaces, never used to invent new ones.
+The system was inherited from a pre-approved Stitch export ("Kinetic Work OS," `stitch-export/code/design-system.md`) and ported into Tailwind v4 `@theme` tokens — type ramp, radii, and spacing carry the original names and values unchanged. The color ramp was rebalanced from the inherited version to the 60/30/10 ratio above (surfaces moved from a warm blush tint to true neutral gray; a new `accent` token pair was added) per explicit user direction; the four semantic status colors and the type/spacing/radius system are otherwise untouched. The brand red family was later re-matched to the hue/saturation of the logo mark's red (`#f72b1f`, `public/LOGOS.png`), replacing the original muted brick-red — lightness per token was tuned to stay off the literal swatch where needed for white-text contrast. What this build adds on top is a motion layer (`motion`, expo-out easing `cubic-bezier(0.16, 1, 0.3, 1)`) that makes the system feel alive: shared-layout tab underlines, `layoutId`-based Kanban drag transitions, spring-feeling status-pill presses, and orchestrated collapse/expand — motion is applied to existing surfaces, never used to invent new ones.
 
 **Key Characteristics:**
 - Ultra-clean white/near-white canvases with a true neutral-gray surface family (`surface-subtle`, `surface-container` through `surface-container-highest`) for tonal layering instead of borders alone — the 60% majority color.
-- Brick red (`primary-container` `#AC484C` / `primary` `#A13F44`) as the 30% secondary: the icon rail, primary actions, tag chips, selection, and progress fills — present throughout, never a background fill for informational content.
+- Logo red (`primary-container` `#E41B10` / `primary` `#D81308`) as the 30% secondary: the icon rail, primary actions, tag chips, selection, and progress fills — present throughout, never a background fill for informational content.
 - Electric indigo (`accent` `#6161FF`) as the 10% accent, reserved for one job: interactive emphasis (focus rings app-wide, search/input focus glow). Chosen to match the original brand-accent commitment in PRODUCT.md rather than repurposing the reserved tertiary green, which already carries the "done" status meaning.
 - Four solid, high-recognition semantic status colors carry all task-state meaning across all four views identically.
 - Every state transition (status change, drag, tab switch, group collapse, KPI count-up) animates on the same expo-out curve; motion is structural, not decorative.
@@ -167,33 +167,33 @@ The system was inherited from a pre-approved Stitch export ("Kinetic Work OS," `
 
 ## Colors
 
-The palette follows a 60/30/10 ratio: a true neutral scale for surfaces (60%), a muted brick-red secondary (30%), and one electric-indigo accent (10%) — plus four solid semantic status colors that never bleed into decorative use and sit outside the ratio.
+The palette follows a 60/30/10 ratio: a true neutral scale for surfaces (60%), a vivid logo-red secondary (30%), and one electric-indigo accent (10%) — plus four solid semantic status colors that never bleed into decorative use and sit outside the ratio.
 
 ### Primary (30%)
-- **Brick Red** (`primary-container` `#AC484C`, `primary` `#A13F44`): the icon rail (`surface-sidebar`), active view-switcher tab + its underline, primary buttons (New Task, Add Widget), progress-bar fills, active toolbar toggles (e.g. Kanban's "Priority" sort pill), and drag-target ring highlight.
-- **Brick Red Fixed** (`primary-fixed` `#FADAD9` / `on-primary-fixed` `#470007`): reserved tint for a person's avatar chip and the icon-rail logo mark.
+- **Logo Red** (`primary-container` `#E41B10`, `primary` `#D81308`): the icon rail (`surface-sidebar`), active view-switcher tab + its underline, primary buttons (New Task, Add Widget), progress-bar fills, active toolbar toggles (e.g. Kanban's "Priority" sort pill), and drag-target ring highlight. Matched to the hue/saturation of the logo mark's red (`#F72B1F`, `public/LOGOS.png`); kept slightly deeper than the literal swatch so white button/tag text clears WCAG AA contrast.
+- **Logo Red Fixed** (`primary-fixed` `#FFD6D4` / `on-primary-fixed` `#470400`): reserved tint for a person's avatar chip and the icon-rail logo mark.
 
 ### Accent (10%)
 - **Electric Indigo** (`accent` `#6161FF`, `accent-container` `#E3E3FF` / `on-accent-container` `#2B2B8F`): the one interactive-emphasis color — every keyboard `:focus-visible` outline app-wide, every text input's focus ring, and text selection. Never used for brand identity, primary actions, or status — those stay in the primary-red and status-color families respectively, so the accent's presence stays legible as "you are interacting with this" rather than competing with brand red.
 
 ### Secondary
-- **Warm Taupe** (`secondary` `#775454`, `secondary-container` `#FED5D4`): Kanban card tag chips ("Ops", "Tech", "Strategy") and secondary metadata accents — part of the same red hue family as Primary, contributing to its 30% share.
+- **Warm Taupe** (`secondary` `#8B4440`, `secondary-container` `#FFD5D3`): Kanban card tag chips ("Ops", "Tech", "Strategy") and secondary metadata accents — part of the same red hue family as Primary, contributing to its 30% share.
 
 ### Tertiary
 - **Signal Green** (`tertiary` `#006D3B`, distinct from `status-done`): reserved token in the inherited scale; not observed in active use in the shipped views (status completion uses `status-done` instead, and the new `accent` token owns the "second interactive color" role). Kept for system completeness, not exercised.
 
 ### Neutral (60%)
 - **Ink** (`on-surface` `#1C1917`): primary text, titles, task names.
-- **Warm Text** (`on-surface-variant` `#57534E`, `secondary` `#775454`): metadata, column headers, secondary copy.
+- **Warm Text** (`on-surface-variant` `#57534E`, `secondary` `#8B4440`): metadata, column headers, secondary copy.
 - **Outline** (`outline` `#78716C`, `outline-variant` `#D6D3D1`): icon glyphs at rest, dividers, unfilled star/priority glyphs.
 - **Canvas** (`canvas-bg` `#FFFFFF`): the flat white base for cards, table rows, panels.
 - **Surface Subtle** (`surface-subtle` `#FAFAF9`): table header rows, hover states, toolbar chip backgrounds.
 - **Surface Container family** (`surface-container` `#F5F5F4` → `surface-container-highest` `#E7E5E4`): true neutral tonal layering for nested chips, count badges, and Kanban column backgrounds — used instead of adding more border lines as density increases. Deliberately neutral gray, not red-tinted, so it reads as part of the 60% majority rather than diluting the 30% red share.
-- **Sidebar Ink** (`surface-sidebar` `#492626`): the sole dark surface in the system, exclusive to the icon rail and the Kanban "board synced" status pill — counted toward the 30% red share since it's a shade within the brand hue.
+- **Sidebar Ink** (`surface-sidebar` `#5D1612`): the sole dark surface in the system, exclusive to the icon rail and the Kanban "board synced" status pill — counted toward the 30% red share since it's a shade within the brand hue.
 - **Border Subtle** (`border-subtle` `#ECECEB`): the 1px grid line between table cells, groups, and toolbar sections.
 
 ### Named Rules
-**The 60/30/10 Rule.** Surfaces (background, canvas, the full surface-container scale) stay true neutral gray and form the visual majority. Brick red (`primary`/`primary-container`/`secondary`/`surface-sidebar`) is the clear secondary presence — the icon rail, primary actions, tags, and selection all draw from it, but it is never used as a background fill for large blocks of informational content; that role belongs to the neutral surface-container scale. It is kept deliberately muted (mid-lightness, moderate chroma) so it reads distinctly from the brighter, more saturated `status-stuck` red used for blocked-task alerts — the two never get confused despite sharing a hue family. Electric indigo (`accent`) is reserved exclusively for interactive emphasis (focus/selection) and never appears as brand identity or a primary action.
+**The 60/30/10 Rule.** Surfaces (background, canvas, the full surface-container scale) stay true neutral gray and form the visual majority. Logo red (`primary`/`primary-container`/`secondary`/`surface-sidebar`) is the clear secondary presence — the icon rail, primary actions, tags, and selection all draw from it, but it is never used as a background fill for large blocks of informational content; that role belongs to the neutral surface-container scale. It sits ~12° apart in hue from the pinker, lighter `status-stuck` red used for blocked-task alerts, so the two stay visually distinct (orange-leaning brand red vs. crimson-leaning status red) despite sharing a hue family. Electric indigo (`accent`) is reserved exclusively for interactive emphasis (focus/selection) and never appears as brand identity or a primary action.
 
 **The Solid Status Rule.** `status-done`/`working`/`stuck`/`empty` are always solid fills with white (or near-white) text, never tinted or outlined, so a status reads at a glance across Table, Kanban, Timeline, and Dashboard without re-learning per view.
 

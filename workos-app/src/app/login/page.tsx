@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { Eye, EyeOff } from "lucide-react";
@@ -48,13 +49,11 @@ function LoginForm() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-surface-subtle px-space-md py-space-xl">
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-primary/20 via-white to-surface-subtle px-space-md py-space-xl">
       <div className="w-full max-w-sm flex flex-col items-center gap-space-lg">
         <div className="flex items-center gap-space-sm">
-          <div className="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-headline-sm">
-            W
-          </div>
-          <span className="text-headline-lg text-on-surface font-bold tracking-tight">WorkOS</span>
+          <Image src="/LOGOS.png" alt="" width={40} height={40} className="w-10 h-10" priority />
+          <span className="text-headline-lg text-on-surface font-bold tracking-tight">SomagoOS</span>
         </div>
 
         <div className="w-full bg-canvas-bg rounded-2xl shadow-lg shadow-black/5 border border-border-subtle p-space-lg flex flex-col gap-space-md">

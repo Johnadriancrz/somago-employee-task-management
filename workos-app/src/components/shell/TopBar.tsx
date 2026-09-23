@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
@@ -24,11 +25,9 @@ export function TopBar() {
     >
       <div className="flex items-center gap-space-xl min-w-0">
         <div className="flex items-center gap-space-sm shrink-0">
-          <div className="w-8 h-8 rounded-sm bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-body-sm">
-            W
-          </div>
+          <Image src="/LOGOS.png" alt="" width={32} height={32} className="w-8 h-8" priority />
           <span className="text-headline-sm text-on-surface font-bold tracking-tight hidden sm:inline">
-            WorkOS
+            SomagoOS
           </span>
         </div>
         <div className="relative items-center hidden lg:flex">
