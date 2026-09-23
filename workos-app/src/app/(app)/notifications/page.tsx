@@ -81,7 +81,7 @@ export default function NotificationsPage() {
   return (
     <AppShell>
       <main className="w-full pt-14 min-h-screen">
-        <div className="px-space-md md:px-space-xl py-space-lg max-w-3xl">
+        <div className="px-space-md md:px-space-xl py-space-lg max-w-3xl mx-auto">
           <PageHeader
             title="Notifications"
             description={`${unreadCount} unread update${unreadCount === 1 ? "" : "s"} across your boards.`}

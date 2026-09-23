@@ -4,6 +4,7 @@ import { ClockProvider } from "@/lib/clock";
 import { RailProvider } from "@/lib/rail";
 import { ConfirmProvider } from "@/lib/confirm";
 import { TaskDetailPanel } from "@/components/panels/TaskDetailPanel";
+import { ClockInPrompt } from "@/components/shell/ClockInPrompt";
 
 /**
  * Everything behind auth. Scoped to this route group (rather than the root
@@ -18,6 +19,7 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
           <ConfirmProvider>
             {children}
             <TaskDetailPanel />
+            <ClockInPrompt />
           </ConfirmProvider>
         </RailProvider>
       </ClockProvider>

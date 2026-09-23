@@ -29,7 +29,7 @@ export default function ReportsHubPage() {
   return (
     <AppShell>
       <main className="w-full pt-14 min-h-screen">
-        <div className="px-space-md md:px-space-xl py-space-lg max-w-6xl">
+        <div className="px-space-md md:px-space-xl py-space-lg max-w-6xl mx-auto">
           <PageHeader
             title="Reports"
             description="A quick health check across every board in this workspace."

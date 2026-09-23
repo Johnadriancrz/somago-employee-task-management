@@ -43,7 +43,7 @@ export default function MembersPage() {
   return (
     <AppShell>
       <main className="w-full pt-14 min-h-screen">
-        <div className="px-space-md md:px-space-xl py-space-lg max-w-5xl">
+        <div className="px-space-md md:px-space-xl py-space-lg max-w-5xl mx-auto">
           <PageHeader
             title="Members"
             description={

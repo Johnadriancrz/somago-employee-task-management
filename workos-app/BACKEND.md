@@ -188,15 +188,14 @@ or posting to a DM you're not part of gets a 403.
 | POST | `/api/time/clock-in` | — | created `TimeEntry` (201), 409 if already clocked in |
 | POST | `/api/time/clock-out` | — | closed `TimeEntry`, 409 if not clocked in |
 | GET | `/api/time/status` | — | the signed-in user's open `TimeEntry`, or `null` |
-| GET | `/api/time/entries?personId=...` | — | `TimeEntry[]`, workspace-wide unless `personId` filters to one person |
+| GET | `/api/time/entries?personId=...` | — | `TimeEntry[]` — workspace-wide for Human Resource/Finance/CEO/Operations Manager roles (`personId` optionally narrows to one person); every other role always gets just their own entries and `personId` is ignored |
 
 The signed-in user is always taken from the session for clock-in/out — never
-from the request body. `GET /api/time/entries` is intentionally open to any
-signed-in user, not just the requester's own entries: this app has no
-role/permission system yet (see note below), so the HR/finance KPI view on
-`/time-clock` just reads everyone's entries directly. A real deployment
-should gate that endpoint (and the page) to an HR/finance role once one
-exists.
+from the request body. `GET /api/time/entries` checks the signed-in person's
+`role` (see `canViewAllTimeEntries` in `src/lib/roles.ts`) to decide whether
+they get the workspace-wide KPI view or just their own entries; the
+`/time-clock` page mirrors this so non-privileged roles never see a table of
+other people's hours.
 
 **Reset** (used by the "Reset demo data" button)
 

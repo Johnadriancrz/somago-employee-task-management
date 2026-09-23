@@ -46,7 +46,7 @@ function AdminLoginForm() {
             <ShieldCheck size={20} />
           </div>
           <span className="text-headline-lg text-inverse-on-surface font-bold tracking-tight">
-            WorkOS Admin
+            SomagoOS Admin
           </span>
         </div>
 

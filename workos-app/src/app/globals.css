@@ -2,16 +2,18 @@
 
 /*
   Kinetic Work OS design tokens. Recolored to a 60/30/10 ratio at the user's
-  request: white/neutral surfaces carry ~60% of the UI, the brand brick-red
+  request: white/neutral surfaces carry ~60% of the UI, the brand red
   is a true secondary color at ~30% (sidebar, primary actions, tags,
   selection), and a new electric-indigo accent token carries the remaining
   ~10% for interactive emphasis (focus, links, active-filter highlight) —
   chosen to match the original brand-accent commitment in PRODUCT.md
   (`#6161FF`) rather than reusing the reserved-but-unused tertiary green,
-  which already carries the "done" status meaning elsewhere. Light mode
-  only (brand commitment) — no dark-mode media query. Keep this file the
-  single source of truth for color/type/spacing/radius so every view stays
-  visually consistent.
+  which already carries the "done" status meaning elsewhere. The brand red
+  family was later matched to the logo mark's red (`#f72b1f`, see
+  public/LOGOS.png) — same hue/saturation, lightness tuned per-token to
+  keep white label text AA-legible. Light mode only (brand commitment) —
+  no dark-mode media query. Keep this file the single source of truth for
+  color/type/spacing/radius so every view stays visually consistent.
 */
 
 @theme {
@@ -40,26 +42,30 @@
   --color-border-subtle: #ececeb;
   --color-border-dark: #d6d3d1;
 
-  /* Colors — 30% brand red (secondary): primary actions, sidebar, tags, selection */
-  --color-surface-tint: #a13f44;
-  --color-primary: #a13f44;
+  /* Colors — 30% brand red (secondary): primary actions, sidebar, tags, selection.
+     Hue/saturation matched to the logo mark's red (#f72b1f); lightness kept
+     deeper than the literal swatch on tokens paired with white text so
+     button/tag labels stay WCAG AA-legible (the raw logo red only clears
+     ~3.9:1 against white, below the 4.5:1 needed for small label text). */
+  --color-surface-tint: #d81308;
+  --color-primary: #d81308;
   --color-on-primary: #ffffff;
-  --color-primary-container: #ac484c;
+  --color-primary-container: #e41b10;
   --color-on-primary-container: #ffffff;
-  --color-inverse-primary: #f2b8b5;
-  --color-secondary: #775454;
+  --color-inverse-primary: #ffada8;
+  --color-secondary: #8b4440;
   --color-on-secondary: #ffffff;
-  --color-secondary-container: #fed5d4;
-  --color-on-secondary-container: #7b5a59;
-  --color-primary-fixed: #fadad9;
-  --color-primary-fixed-dim: #eeb3ae;
-  --color-on-primary-fixed: #470007;
-  --color-on-primary-fixed-variant: #7c2f33;
-  --color-secondary-fixed: #fed9d7;
-  --color-secondary-fixed-dim: #e4bcbb;
-  --color-on-secondary-fixed: #2f1213;
-  --color-on-secondary-fixed-variant: #5e3e3d;
-  --color-surface-sidebar: #492626;
+  --color-secondary-container: #ffd5d3;
+  --color-on-secondary-container: #8e4a46;
+  --color-primary-fixed: #ffd6d4;
+  --color-primary-fixed-dim: #ffa29d;
+  --color-on-primary-fixed: #470400;
+  --color-on-primary-fixed-variant: #a70d04;
+  --color-secondary-fixed: #ffd8d6;
+  --color-secondary-fixed-dim: #fba9a4;
+  --color-on-secondary-fixed: #3f0502;
+  --color-on-secondary-fixed-variant: #712e2a;
+  --color-surface-sidebar: #5d1612;
 
   /* Colors — 10% accent: interactive emphasis (focus, links, active highlight) */
   --color-accent: #6161ff;

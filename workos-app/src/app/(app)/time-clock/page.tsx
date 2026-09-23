@@ -11,14 +11,36 @@ import { useBoard } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useClock, useElapsedLabel } from "@/lib/clock";
 import { fetchTimeEntries } from "@/lib/api-client";
+import { canViewAllTimeEntries } from "@/lib/roles";
 import type { TimeEntry } from "@/lib/types";
 
-type RangeId = "week" | "month" | "all";
+type RangeId = "day" | "thisWeek" | "week" | "month" | "all";
 
-const RANGES: { id: RangeId; label: string; days: number | null }[] = [
-  { id: "week", label: "Last 7 days", days: 7 },
-  { id: "month", label: "Last 30 days", days: 30 },
-  { id: "all", label: "All time", days: null },
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Start of the current calendar day, in local time. */
+function startOfDay(asOf: number): number {
+  const d = new Date(asOf);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** Start of the current calendar week (Monday), in local time. */
+function startOfWeek(asOf: number): number {
+  const d = new Date(asOf);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); // 0 = Sunday .. 6 = Saturday
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - diffToMonday);
+  return d.getTime();
+}
+
+const RANGES: { id: RangeId; label: string; getCutoff: (asOf: number) => number | null }[] = [
+  { id: "day", label: "Today", getCutoff: startOfDay },
+  { id: "thisWeek", label: "This week", getCutoff: startOfWeek },
+  { id: "week", label: "Last 7 days", getCutoff: (asOf) => asOf - 7 * DAY_MS },
+  { id: "month", label: "Last 30 days", getCutoff: (asOf) => asOf - 30 * DAY_MS },
+  { id: "all", label: "All time", getCutoff: () => null },
 ];
 
 function durationHours(entry: TimeEntry, now: number): number {
@@ -43,6 +65,8 @@ export default function TimeClockPage() {
   const [asOf, setAsOf] = useState(0);
   const [range, setRange] = useState<RangeId>("week");
 
+  const canViewAll = canViewAllTimeEntries(user?.role);
+
   const loadEntries = () => {
     fetchTimeEntries()
       .then((data) => {
@@ -54,15 +78,23 @@ export default function TimeClockPage() {
 
   useEffect(loadEntries, []);
 
-  const cutoff = RANGES.find((r) => r.id === range)?.days;
+  const getCutoff = RANGES.find((r) => r.id === range)?.getCutoff;
   const scopedEntries = useMemo(() => {
-    if (!cutoff) return entries;
-    const cutoffMs = asOf - cutoff * 24 * 60 * 60 * 1000;
-    return entries.filter((e) => new Date(e.clockIn).getTime() >= cutoffMs);
-  }, [entries, cutoff, asOf]);
+    const cutoff = getCutoff?.(asOf) ?? null;
+    if (cutoff === null) return entries;
+    return entries.filter((e) => new Date(e.clockIn).getTime() >= cutoff);
+  }, [entries, getCutoff, asOf]);
+
+  // The API already scopes `entries` to the caller's own rows for
+  // non-privileged roles, but `people` (from the board store) still lists
+  // everyone — narrow it here so the table only ever shows one's own row.
+  const visiblePeople = useMemo(() => {
+    if (canViewAll) return people;
+    return people.filter((p) => p.id === user?.id);
+  }, [people, canViewAll, user?.id]);
 
   const perPerson = useMemo(() => {
-    return people
+    return visiblePeople
       .map((person) => {
         const personEntries = scopedEntries.filter((e) => e.personId === person.id);
         const totalHours = personEntries.reduce((sum, e) => sum + durationHours(e, asOf), 0);
@@ -71,7 +103,7 @@ export default function TimeClockPage() {
         return { person, totalHours, days, clockedIn, avgHours: days ? totalHours / days : 0 };
       })
       .sort((a, b) => b.totalHours - a.totalHours);
-  }, [people, scopedEntries, asOf]);
+  }, [visiblePeople, scopedEntries, asOf]);
 
   const totalHours = perPerson.reduce((sum, p) => sum + p.totalHours, 0);
   const totalDays = new Set(scopedEntries.map((e) => new Date(e.clockIn).toDateString())).size;
@@ -80,10 +112,14 @@ export default function TimeClockPage() {
   return (
     <AppShell>
       <main className="w-full pt-14 min-h-screen">
-        <div className="px-space-md md:px-space-xl py-space-lg max-w-6xl">
+        <div className="px-space-md md:px-space-xl py-space-lg max-w-6xl mx-auto">
           <PageHeader
             title="Time Clock"
-            description="Clock in/out and workspace hours for HR and finance."
+            description={
+              canViewAll
+                ? "Clock in/out and workspace hours for HR, Finance, CEO, and Operations Manager."
+                : "Clock in/out and your logged hours."
+            }
           />
 
           {user && (
