@@ -160,16 +160,35 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchWorkspaces(), fetchBoards(), fetchAllTasks(), fetchPeople()])
-      .then(([workspacesData, boardsData, tasksData, peopleData]) => {
-        if (cancelled) return;
-        setWorkspaces(workspacesData);
-        setAllBoards(boardsData);
-        setAllTasksByBoard(tasksData);
-        setPeople(peopleData);
+    // Each resource loads independently — a failure fetching one (e.g.
+    // Workspaces from Spring Boot) must not block the others from landing.
+    fetchWorkspaces()
+      .then((workspacesData) => {
+        if (!cancelled) setWorkspaces(workspacesData);
       })
       .catch((err) => {
-        console.error("Failed to load workspace data from the API, staying on seed data", err);
+        console.error("Failed to load workspaces from the API, staying on seed data", err);
+      });
+    fetchBoards()
+      .then((boardsData) => {
+        if (!cancelled) setAllBoards(boardsData);
+      })
+      .catch((err) => {
+        console.error("Failed to load boards from the API, staying on seed data", err);
+      });
+    fetchAllTasks()
+      .then((tasksData) => {
+        if (!cancelled) setAllTasksByBoard(tasksData);
+      })
+      .catch((err) => {
+        console.error("Failed to load tasks from the API, staying on seed data", err);
+      });
+    fetchPeople()
+      .then((peopleData) => {
+        if (!cancelled) setPeople(peopleData);
+      })
+      .catch((err) => {
+        console.error("Failed to load people from the API, staying on seed data", err);
       });
     return () => {
       cancelled = true;

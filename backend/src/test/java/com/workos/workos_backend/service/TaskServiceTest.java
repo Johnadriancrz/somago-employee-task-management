@@ -134,6 +134,98 @@ class TaskServiceTest {
     }
 
     @Test
+    void createTaskPersistsAttachmentMetadataAndDataUrl() {
+        BoardMeta board = newBoard("sarah-chen");
+        AttachmentInput attachment = new AttachmentInput(
+                "att-1", "notes.txt", 1024, "text/plain", "data:text/plain;base64,SGVsbG8=");
+        CreateTaskRequest request = new CreateTaskRequest(
+                board.getId(), "Task", "this-week", "not-started", null, null,
+                null, 3, "Sep 19", "2025-09-01", "2025-09-19", 0, null, List.of(attachment), null, null, null);
+
+        Task task = taskService.createTask("sarah-chen", request);
+
+        assertThat(task.getAttachments()).hasSize(1);
+        assertThat(task.getAttachments().get(0).getName()).isEqualTo("notes.txt");
+        assertThat(task.getAttachments().get(0).getDataUrl()).isEqualTo("data:text/plain;base64,SGVsbG8=");
+    }
+
+    @Test
+    void updateRejectsOversizedAttachment() {
+        BoardMeta board = newBoard("sarah-chen");
+        Task task = taskService.createTask("sarah-chen", createRequest(board.getId()));
+        AttachmentInput tooBig = new AttachmentInput("att-1", "big.png", 6L * 1024 * 1024, "image/png", "data:x");
+
+        assertThatThrownBy(() -> taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                List.of(tooBig), null, null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void assigneeCanAddAttachmentViaUpdateButNonMemberCannot() {
+        BoardMeta board = newBoard("sarah-chen", "alex-morgan");
+        Task task = taskService.createTask("sarah-chen", createRequest(board.getId()));
+        taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+                null, null, null, null, List.of("alex-morgan"), null, null, null, null, null, null, null,
+                null, null, null, null, null));
+        AttachmentInput attachment = new AttachmentInput(
+                "att-1", "design.png", 2048, "image/png", "data:image/png;base64,AAA");
+
+        Task updated = taskService.updateTask("alex-morgan", task.getId(), new UpdateTaskRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                List.of(attachment), null, null, null, null));
+        assertThat(updated.getAttachments()).hasSize(1);
+        assertThat(updated.getAttachments().get(0).getId()).isEqualTo("att-1");
+
+        assertThatThrownBy(() -> taskService.updateTask("priya-patel", task.getId(), new UpdateTaskRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                List.of(attachment), null, null, null, null)))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void replacingAttachmentsRemovesOnesNotIncludedInPatch() {
+        BoardMeta board = newBoard("sarah-chen");
+        AttachmentInput first = new AttachmentInput("att-1", "a.png", 100, "image/png", "data:a");
+        AttachmentInput second = new AttachmentInput("att-2", "b.png", 100, "image/png", "data:b");
+        CreateTaskRequest request = new CreateTaskRequest(
+                board.getId(), "Task", "this-week", "not-started", null, null,
+                null, 3, "Sep 19", "2025-09-01", "2025-09-19", 0, null, List.of(first, second), null, null, null);
+        Task task = taskService.createTask("sarah-chen", request);
+        assertThat(task.getAttachments()).hasSize(2);
+
+        Task updated = taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                List.of(first), null, null, null, null));
+
+        assertThat(updated.getAttachments()).hasSize(1);
+        assertThat(updated.getAttachments().get(0).getId()).isEqualTo("att-1");
+    }
+
+    @Test
+    void deletingTaskRemovesItsAttachments() {
+        BoardMeta board = newBoard("sarah-chen");
+        AttachmentInput attachment = new AttachmentInput("att-1", "a.png", 100, "image/png", "data:a");
+        CreateTaskRequest request = new CreateTaskRequest(
+                board.getId(), "Task", "this-week", "not-started", null, null,
+                null, 3, "Sep 19", "2025-09-01", "2025-09-19", 0, null, List.of(attachment), null, null, null);
+        Task task = taskService.createTask("sarah-chen", request);
+        String taskId = task.getId();
+        entityManager.flush();
+
+        taskService.deleteTask("sarah-chen", taskId);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(taskRepository.findById(taskId)).isEmpty();
+        Long remainingAttachments = entityManager
+                .createQuery("select count(a) from Attachment a where a.task.id = :taskId", Long.class)
+                .setParameter("taskId", taskId)
+                .getSingleResult();
+        assertThat(remainingAttachments).isZero();
+    }
+
+    @Test
     void listVisibleTasksGroupedByBoardIncludesEmptyBoardsAndScopesToMembership() {
         BoardMeta visibleBoard = newBoard("sarah-chen");
         BoardMeta hiddenBoard = newBoard("alex-morgan");
@@ -283,11 +375,11 @@ class TaskServiceTest {
         Task task = taskService.createTask("sarah-chen", createRequest(board.getId()));
 
         assertThatThrownBy(() -> taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, task.getId(), null, null)))
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, task.getId(), null)))
                 .isInstanceOf(IllegalArgumentException.class);
 
         assertThatThrownBy(() -> taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, "does-not-exist", null, null)))
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "does-not-exist", null)))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 

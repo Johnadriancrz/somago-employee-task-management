@@ -19,6 +19,15 @@ import type {
  * data/promises — so the transport (fetch to Next.js route handlers today,
  * anything else later) can change without touching a single component.
  */
+
+/**
+ * Base URL for the Spring Boot backend (People/Workspaces/Boards/Tasks).
+ * Must be NEXT_PUBLIC_-prefixed since this module runs in the browser.
+ * Falls back to the local dev server so `npm run dev` works with no .env
+ * file present — see .env.example to override it.
+ */
+const SPRING_API_BASE_URL = process.env.NEXT_PUBLIC_SPRING_API_BASE_URL ?? "http://localhost:8080";
+
 let recoveringSession = false;
 
 /**
@@ -53,96 +62,117 @@ function handleStaleAdminSession() {
   });
 }
 
-async function request<T>(input: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, {
+/**
+ * @param path Relative Next.js API path (e.g. "/api/tasks"), used as-is for
+ * request identity (401 routing, error messages) regardless of `baseUrl`.
+ * @param baseUrl Prefixed onto `path` to build the actual fetch URL. Empty
+ * (the default) targets the Next.js stub at a relative path; a real origin
+ * targets a separate HTTP service instead — see `springRequest`.
+ */
+async function request<T>(path: string, init?: RequestInit, baseUrl = ""): Promise<T> {
+  const res = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
-  if (res.status === 401 && !input.startsWith("/api/auth/") && !input.startsWith("/api/admin/")) {
+  if (res.status === 401 && !path.startsWith("/api/auth/") && !path.startsWith("/api/admin/")) {
     handleStaleSession();
   }
-  if (res.status === 401 && input.startsWith("/api/admin/") && !input.startsWith("/api/admin/auth/")) {
+  if (res.status === 401 && path.startsWith("/api/admin/") && !path.startsWith("/api/admin/auth/")) {
     handleStaleAdminSession();
   }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error ?? `${init?.method ?? "GET"} ${input} failed: ${res.status}`);
+    throw new Error(body?.error ?? `${init?.method ?? "GET"} ${path} failed: ${res.status}`);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
+/**
+ * Same request/error handling as `request`, but against the Spring Boot
+ * backend's absolute base URL instead of a relative Next.js route. Used by
+ * `fetchPeople`, the Workspace functions, the Board functions, and the Task
+ * functions below.
+ */
+export function springRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  return request(path, init, SPRING_API_BASE_URL);
+}
+
 // Tasks
 
+/** Goes straight to the Spring Boot backend — see BACKEND.md's Tasks section. */
 export function fetchAllTasks(): Promise<Record<BoardId, Task[]>> {
-  return request("/api/tasks");
+  return springRequest("/api/tasks");
 }
 
 export function createTaskRequest(boardId: BoardId, input: NewTaskInput): Promise<Task> {
-  return request("/api/tasks", {
+  return springRequest("/api/tasks", {
     method: "POST",
     body: JSON.stringify({ boardId, ...input }),
   });
 }
 
 export function updateTaskRequest(taskId: string, patch: Partial<Task>): Promise<Task> {
-  return request(`/api/tasks/${taskId}`, {
+  return springRequest(`/api/tasks/${taskId}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
 }
 
 export function deleteTaskRequest(taskId: string): Promise<void> {
-  return request(`/api/tasks/${taskId}`, { method: "DELETE" });
+  return springRequest(`/api/tasks/${taskId}`, { method: "DELETE" });
 }
 
 // Workspaces
 
+/** Goes straight to the Spring Boot backend — see BACKEND.md's Workspaces section. */
 export function fetchWorkspaces(): Promise<Workspace[]> {
-  return request("/api/workspaces");
+  return springRequest("/api/workspaces");
 }
 
 export function createWorkspaceRequest(input: NewWorkspaceInput): Promise<Workspace> {
-  return request("/api/workspaces", { method: "POST", body: JSON.stringify(input) });
+  return springRequest("/api/workspaces", { method: "POST", body: JSON.stringify(input) });
 }
 
 export function deleteWorkspaceRequest(workspaceId: string): Promise<void> {
-  return request(`/api/workspaces/${workspaceId}`, { method: "DELETE" });
+  return springRequest(`/api/workspaces/${workspaceId}`, { method: "DELETE" });
 }
 
 export function addWorkspaceMemberRequest(workspaceId: string, personId: string): Promise<Workspace> {
-  return request(`/api/workspaces/${workspaceId}/members`, {
+  return springRequest(`/api/workspaces/${workspaceId}/members`, {
     method: "POST",
     body: JSON.stringify({ personId }),
   });
 }
 
 export function removeWorkspaceMemberRequest(workspaceId: string, personId: string): Promise<Workspace> {
-  return request(`/api/workspaces/${workspaceId}/members/${personId}`, { method: "DELETE" });
+  return springRequest(`/api/workspaces/${workspaceId}/members/${personId}`, { method: "DELETE" });
 }
 
 // Boards
 
+/** Goes straight to the Spring Boot backend — see BACKEND.md's Boards section. */
 export function fetchBoards(): Promise<BoardMeta[]> {
-  return request("/api/boards");
+  return springRequest("/api/boards");
 }
 
 export function createBoardRequest(input: NewBoardInput): Promise<BoardMeta> {
-  return request("/api/boards", { method: "POST", body: JSON.stringify(input) });
+  return springRequest("/api/boards", { method: "POST", body: JSON.stringify(input) });
 }
 
 export function updateBoardRequest(boardId: BoardId, patch: Partial<NewBoardInput>): Promise<BoardMeta> {
-  return request(`/api/boards/${boardId}`, { method: "PATCH", body: JSON.stringify(patch) });
+  return springRequest(`/api/boards/${boardId}`, { method: "PATCH", body: JSON.stringify(patch) });
 }
 
 export function deleteBoardRequest(boardId: BoardId): Promise<void> {
-  return request(`/api/boards/${boardId}`, { method: "DELETE" });
+  return springRequest(`/api/boards/${boardId}`, { method: "DELETE" });
 }
 
 // People
 
+/** Goes straight to the Spring Boot backend — see BACKEND.md's People section. */
 export function fetchPeople(): Promise<Person[]> {
-  return request("/api/people");
+  return springRequest("/api/people");
 }
 
 // Combined reset

@@ -62,14 +62,7 @@ public class LocalDevPeopleSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        int inserted = 0;
-        for (Person person : SEED_PEOPLE) {
-            if (personRepository.existsById(person.getId())) {
-                continue;
-            }
-            personRepository.save(person);
-            inserted++;
-        }
+        int inserted = seedMissingPeople();
         log.info("[local-dev] People seed: inserted {} new row(s), {} already present.",
                 inserted, SEED_PEOPLE.size() - inserted);
 
@@ -82,5 +75,27 @@ public class LocalDevPeopleSeeder implements ApplicationRunner {
                             + ", or an id you've created yourself.");
         }
         log.info("[local-dev] Acting person for this run: {}", actorId);
+    }
+
+    /**
+     * Inserts any of the six fixed demo Person rows that don't already
+     * exist; never overwrites an existing row, even one a developer has
+     * since edited (see the class Javadoc). Also called by {@link
+     * com.workos.workos_backend.service.ResetService} to restore People as
+     * part of {@code POST /api/reset}, so "reset" and "startup seed" share
+     * one definition of what People demo state means.
+     *
+     * @return the number of rows inserted
+     */
+    public int seedMissingPeople() {
+        int inserted = 0;
+        for (Person person : SEED_PEOPLE) {
+            if (personRepository.existsById(person.getId())) {
+                continue;
+            }
+            personRepository.save(person);
+            inserted++;
+        }
+        return inserted;
     }
 }
