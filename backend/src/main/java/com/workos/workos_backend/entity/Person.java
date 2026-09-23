@@ -7,11 +7,18 @@ import jakarta.persistence.Table;
 
 /**
  * Mirrors the frontend's {@code Person} type (workos-app/src/lib/types.ts).
- * No password/credential fields — authentication is deferred (see BACKEND.md).
  * {@code chipClass} is persisted as a plain string, matching the frontend
  * field exactly; it is presentation data (Tailwind classes) but the frontend
  * contract requires it on every Person, so it is stored as-is rather than
  * derived, to avoid changing existing API semantics.
+ * {@code accessRole} and {@code passwordHash} are a separate, later
+ * addition for auth/RBAC (see Docs/Authentication/WORKOS-AUTH-RBAC-SPEC.md);
+ * both are nullable with no default — a row with a null accessRole is
+ * unauthenticatable by construction. {@code accessRole} is one of the 8
+ * fixed roles in that spec's §3, stored as a plain string (no DB-level
+ * enum/CHECK — spec §15/§20.8, an open question left for a later phase).
+ * {@code passwordHash} must never be exposed via {@link
+ * com.workos.workos_backend.dto.PersonResponse}.
  */
 @Entity
 @Table(name = "people")
@@ -35,6 +42,12 @@ public class Person extends AssignedIdEntity {
 
     @Column(name = "chip_class", nullable = false)
     private String chipClass;
+
+    @Column(name = "access_role", length = 32)
+    private String accessRole;
+
+    @Column(name = "password_hash")
+    private String passwordHash;
 
     protected Person() {
     }
@@ -95,6 +108,22 @@ public class Person extends AssignedIdEntity {
 
     public void setChipClass(String chipClass) {
         this.chipClass = chipClass;
+    }
+
+    public String getAccessRole() {
+        return accessRole;
+    }
+
+    public void setAccessRole(String accessRole) {
+        this.accessRole = accessRole;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
     }
 
     @Override

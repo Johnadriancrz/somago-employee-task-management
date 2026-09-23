@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Clock, LogOut, Timer, CalendarDays, Users } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -43,16 +43,20 @@ export default function TimeClockPage() {
   const [asOf, setAsOf] = useState(0);
   const [range, setRange] = useState<RangeId>("week");
 
-  const loadEntries = () => {
+  const loadEntries = useCallback(() => {
     fetchTimeEntries()
       .then((data) => {
         setEntries(data);
         setAsOf(Date.now());
       })
       .catch((err) => console.error("Failed to load time entries", err));
-  };
+  }, []);
 
-  useEffect(loadEntries, []);
+  // Re-fetch whenever clock status changes anywhere in the app (this page's
+  // own button, or the TopBar's ClockWidget) — entry is shared ClockContext
+  // state, so this keeps the KPI cards/table in sync with the running timer
+  // instead of only refreshing on this page's own clock-in/out clicks.
+  useEffect(loadEntries, [entry, loadEntries]);
 
   const cutoff = RANGES.find((r) => r.id === range)?.days;
   const scopedEntries = useMemo(() => {
@@ -108,7 +112,7 @@ export default function TimeClockPage() {
                 <Button
                   variant="ghost"
                   className="text-status-stuck hover:bg-status-stuck/10"
-                  onClick={() => clockOut().then(loadEntries).catch((err) => console.error("Failed to clock out", err))}
+                  onClick={() => clockOut().catch((err) => console.error("Failed to clock out", err))}
                 >
                   <LogOut size={14} />
                   Clock out
@@ -116,7 +120,7 @@ export default function TimeClockPage() {
               ) : (
                 <Button
                   variant="primary"
-                  onClick={() => clockIn().then(loadEntries).catch((err) => console.error("Failed to clock in", err))}
+                  onClick={() => clockIn().catch((err) => console.error("Failed to clock in", err))}
                 >
                   <Clock size={14} />
                   Clock in

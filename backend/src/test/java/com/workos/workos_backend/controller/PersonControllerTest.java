@@ -41,4 +41,21 @@ class PersonControllerTest {
         assertThat(result).bodyJson().extractingPath("$[?(@.id=='sarah-chen')].chipClass").asArray()
                 .containsExactly("bg-secondary-container text-on-secondary-container");
     }
+
+    @Test
+    void responseNeverIncludesPasswordHash() throws java.io.UnsupportedEncodingException {
+        MvcTestResult result = mvc.get().uri("/api/people").exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result.getResponse().getContentAsString()).doesNotContain("passwordHash");
+    }
+
+    @Test
+    void accessRoleIsNullForSeededDemoPeople() {
+        MvcTestResult result = mvc.get().uri("/api/people").exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result).bodyJson().extractingPath("$[?(@.id=='sarah-chen')].accessRole").asArray()
+                .containsExactly((Object) null);
+    }
 }

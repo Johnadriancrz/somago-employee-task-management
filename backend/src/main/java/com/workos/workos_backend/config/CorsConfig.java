@@ -29,6 +29,13 @@ public class CorsConfig implements WebMvcConfigurer {
         registry.addMapping("/api/**")
                 .allowedOrigins(allowedOrigins)
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                .allowedHeaders("*");
+                .allowedHeaders("*")
+                // Required for the browser to send/receive the session cookie
+                // cross-origin (spec section 2.4/6.3) once the frontend calls
+                // this API with `credentials: "include"` — not yet true today
+                // (that's Phase 5), but harmless to enable now since it only
+                // relaxes credentialed-request handling for the already
+                // explicit origin allowlist above, never a wildcard.
+                .allowCredentials(true);
     }
 }

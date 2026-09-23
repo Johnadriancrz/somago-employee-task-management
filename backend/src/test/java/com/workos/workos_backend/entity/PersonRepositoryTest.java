@@ -41,6 +41,32 @@ class PersonRepositoryTest {
     }
 
     @Test
+    void accessRoleAndPasswordHashDefaultToNull() {
+        Person saved = personRepository.save(new Person(
+                "jordan-lee", "Jordan Lee", "jordan.lee@workos.dev", "JL", "Ops",
+                "chip"));
+
+        Person reloaded = personRepository.findById(saved.getId()).orElseThrow();
+
+        assertThat(reloaded.getAccessRole()).isNull();
+        assertThat(reloaded.getPasswordHash()).isNull();
+    }
+
+    @Test
+    void savesAndReloadsAccessRoleAndPasswordHash() {
+        Person person = new Person(
+                "casey-ceo", "Casey CEO", "casey.ceo@workos.dev", "CC", "Ops", "chip");
+        person.setAccessRole("CEO");
+        person.setPasswordHash("$2a$10$hashedvalue");
+        Person saved = personRepository.save(person);
+
+        Person reloaded = personRepository.findById(saved.getId()).orElseThrow();
+
+        assertThat(reloaded.getAccessRole()).isEqualTo("CEO");
+        assertThat(reloaded.getPasswordHash()).isEqualTo("$2a$10$hashedvalue");
+    }
+
+    @Test
     void rejectsDuplicateEmail() {
         personRepository.saveAndFlush(new Person("alex-morgan", "Alex Morgan", "dup@workos.dev", "AM", "Lead Architect", "chip"));
 

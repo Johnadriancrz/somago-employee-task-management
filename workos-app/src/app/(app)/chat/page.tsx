@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Hash, Send } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Hash, Send, LogIn } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
 import { useBoard } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { fetchMessages, openMessageStream, sendMessageRequest } from "@/lib/api-client";
@@ -46,11 +48,64 @@ function useConversationMessages(conversationId: ConversationId) {
 
 export default function ChatPage() {
   const { people } = useBoard();
-  const { user } = useAuth();
+  const { user, status, logout } = useAuth();
+  const router = useRouter();
   const [activeConversationId, setActiveConversationId] = useState<ConversationId>(GENERAL_CHANNEL_ID);
   const [activeDmPersonId, setActiveDmPersonId] = useState<string | null>(null);
 
-  if (!user) return null;
+  // A session cookie can outlive the server-side session it points to (e.g.
+  // a dev-server restart wipes the in-memory session store) — proxy.ts only
+  // checks the cookie is present, so a stale one still reaches this page.
+  // /api/auth/me then 401s and AuthProvider settles on "unauthenticated"
+  // with `user` staying null forever. Clear the dead cookie via logout()
+  // before navigating — a plain router push would leave the stale cookie
+  // in place, and proxy.ts would bounce /login straight back to "/" (it
+  // only checks cookie presence, not validity). Hard-navigate afterward,
+  // same as handleStaleSession in api-client.ts, so BoardProvider/
+  // ClockProvider/AuthProvider all remount clean instead of risking stale
+  // context state from a client-side transition.
+  useEffect(() => {
+    if (status !== "unauthenticated") return;
+    let cancelled = false;
+    logout().finally(() => {
+      if (cancelled) return;
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = "/login";
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [status, logout]);
+
+  if (status === "loading") {
+    return (
+      <AppShell>
+        <main className="w-full pt-14 h-screen flex items-center justify-center">
+          <div className="flex flex-col items-center gap-space-sm text-secondary">
+            <span className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            <p className="text-body-sm">Loading chat…</p>
+          </div>
+        </main>
+      </AppShell>
+    );
+  }
+
+  if (status === "unauthenticated" || !user) {
+    return (
+      <AppShell>
+        <main className="w-full pt-14 h-screen flex items-center justify-center">
+          <div className="flex flex-col items-center gap-space-sm text-center max-w-sm px-space-md">
+            <p className="text-body-md text-on-surface font-medium">Your session has expired</p>
+            <p className="text-body-sm text-secondary">Sign in again to keep chatting.</p>
+            <Button variant="primary" className="mt-space-xs" onClick={() => router.replace("/login")}>
+              <LogIn size={14} />
+              Go to sign in
+            </Button>
+          </div>
+        </main>
+      </AppShell>
+    );
+  }
 
   const otherPeople = people.filter((p) => p.id !== user.id);
   const activeDmPerson = activeDmPersonId ? people.find((p) => p.id === activeDmPersonId) : null;

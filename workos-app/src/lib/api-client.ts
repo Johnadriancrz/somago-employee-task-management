@@ -236,20 +236,23 @@ export function openMessageStream(
 
 // Time clock
 
+/** Goes straight to the Spring Boot backend — see BACKEND.md's Time clock section. */
 export function fetchClockStatus(): Promise<TimeEntry | null> {
-  return request("/api/time/status");
+  return springRequest("/api/time/status");
 }
 
 export function clockInRequest(): Promise<TimeEntry> {
-  return request("/api/time/clock-in", { method: "POST" });
+  return springRequest("/api/time/clock-in", { method: "POST" });
 }
 
 export function clockOutRequest(): Promise<TimeEntry> {
-  return request("/api/time/clock-out", { method: "POST" });
+  return springRequest("/api/time/clock-out", { method: "POST" });
 }
 
 export function fetchTimeEntries(personId?: string): Promise<TimeEntry[]> {
-  return request(personId ? `/api/time/entries?personId=${encodeURIComponent(personId)}` : "/api/time/entries");
+  return springRequest(
+    personId ? `/api/time/entries?personId=${encodeURIComponent(personId)}` : "/api/time/entries",
+  );
 }
 
 // Admin — a fully separate login/session from the workspace-user auth above.

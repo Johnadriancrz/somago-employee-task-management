@@ -2,14 +2,20 @@ package com.workos.workos_backend.dto;
 
 import com.workos.workos_backend.entity.Person;
 
-/** Matches the frontend's {@code Person} type exactly (workos-app/src/lib/types.ts). */
+/**
+ * Matches the frontend's {@code Person} type exactly (workos-app/src/lib/types.ts),
+ * plus {@code accessRole} for auth/RBAC (see
+ * Docs/Authentication/WORKOS-AUTH-RBAC-SPEC.md §8). {@code passwordHash} must
+ * never appear here.
+ */
 public record PersonResponse(
         String id,
         String name,
         String email,
         String initials,
         String role,
-        String chipClass) {
+        String chipClass,
+        String accessRole) {
 
     public static PersonResponse from(Person person) {
         return new PersonResponse(
@@ -18,6 +24,7 @@ public record PersonResponse(
                 person.getEmail(),
                 person.getInitials(),
                 person.getRole(),
-                person.getChipClass());
+                person.getChipClass(),
+                person.getAccessRole());
     }
 }
