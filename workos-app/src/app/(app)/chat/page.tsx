@@ -6,11 +6,11 @@ import { Hash, Send, LogIn } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { useBoard } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { fetchMessages, openMessageStream, sendMessageRequest } from "@/lib/api-client";
+import { fetchChatDirectory, fetchMessages, sendMessageRequest } from "@/lib/api-client";
+import { appendIncomingMessage, connectChatSocket, type ChatConnectionState, type ChatSocketHandle } from "@/lib/chat-socket";
 import { GENERAL_CHANNEL_ID, dmConversationId } from "@/lib/conversation-id";
-import type { ChatMessage, ConversationId } from "@/lib/types";
+import type { ChatMessage, ConversationId, Person } from "@/lib/types";
 
 function formatTimestamp(iso: string): string {
   const date = new Date(iso);
@@ -22,7 +22,11 @@ function formatTimestamp(iso: string): string {
 
 // Mounted fresh per conversation (see the `key={activeConversationId}` below),
 // so this always starts empty for the right conversation — no manual reset needed.
-function useConversationMessages(conversationId: ConversationId) {
+function useConversationMessages(
+  conversationId: ConversationId,
+  chatSocket: ChatSocketHandle | null,
+  connectionState: ChatConnectionState,
+) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Distinguishes "genuinely no messages yet" from "failed to load" — both
   // start as an empty `messages` array, so the load failure needs its own
@@ -40,16 +44,38 @@ function useConversationMessages(conversationId: ConversationId) {
         console.error("Failed to load messages", err);
         if (!cancelled) setLoadError(true);
       });
-
-    const closeStream = openMessageStream(conversationId, (message) => {
-      setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
-    });
-
     return () => {
       cancelled = true;
-      closeStream();
     };
   }, [conversationId, retryCount]);
+
+  // Separate from the history load above: `chatSocket` starts out null (the
+  // Chat page connects it after mount) and only this effect needs to rerun
+  // once it's ready, rather than re-fetching history too.
+  useEffect(() => {
+    if (!chatSocket) return;
+    chatSocket.subscribe(conversationId, (message) => {
+      setMessages((prev) => appendIncomingMessage(prev, conversationId, message));
+    });
+    return () => chatSocket.unsubscribe();
+  }, [conversationId, chatSocket]);
+
+  // The socket resubscribes to this conversation on its own after a
+  // reconnect, but STOMP is live-delivery only — never a backfill — so any
+  // message sent during the gap has to be picked up by reloading history.
+  const wasDisconnected = useRef(false);
+  useEffect(() => {
+    if (connectionState === "disconnected") {
+      wasDisconnected.current = true;
+      return;
+    }
+    if (connectionState === "connected" && wasDisconnected.current) {
+      wasDisconnected.current = false;
+      fetchMessages(conversationId)
+        .then((data) => setMessages(data))
+        .catch((err) => console.error("Failed to reload messages after reconnect", err));
+    }
+  }, [connectionState, conversationId]);
 
   const retry = () => {
     setLoadError(false);
@@ -60,11 +86,46 @@ function useConversationMessages(conversationId: ConversationId) {
 }
 
 export default function ChatPage() {
-  const { people } = useBoard();
   const { user, status, logout } = useAuth();
   const router = useRouter();
   const [activeConversationId, setActiveConversationId] = useState<ConversationId>(GENERAL_CHANNEL_ID);
   const [activeDmPersonId, setActiveDmPersonId] = useState<string | null>(null);
+  // Chat-specific directory (accessRole != null) — deliberately not the
+  // global `people` from useBoard(), which also includes seeded/demo
+  // workspace-member Persons with no login account and therefore no way to
+  // read a DM. See BACKEND.md's Chat section / GET /api/people/chat-directory.
+  const [directory, setDirectory] = useState<Person[]>([]);
+  const [chatSocket, setChatSocket] = useState<ChatSocketHandle | null>(null);
+  const [connectionState, setConnectionState] = useState<ChatConnectionState>("connecting");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchChatDirectory()
+      .then((data) => {
+        if (!cancelled) setDirectory(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load the chat directory from the API", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // One WebSocket connection for as long as the Chat page is mounted —
+  // conversation switches call chatSocket.subscribe() again on this same
+  // handle (see ConversationThread) rather than reconnecting.
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const socket = connectChatSocket(setConnectionState);
+    // Deferred a tick so this isn't a synchronous setState call within the
+    // effect body itself — the socket is already connecting either way.
+    Promise.resolve().then(() => setChatSocket(socket));
+    return () => {
+      socket.disconnect();
+      setChatSocket(null);
+    };
+  }, [status]);
 
   // A session cookie can outlive the server-side session it points to (e.g.
   // a dev-server restart wipes the in-memory session store) — proxy.ts only
@@ -120,8 +181,8 @@ export default function ChatPage() {
     );
   }
 
-  const otherPeople = people.filter((p) => p.id !== user.id);
-  const activeDmPerson = activeDmPersonId ? people.find((p) => p.id === activeDmPersonId) : null;
+  const otherPeople = directory.filter((p) => p.id !== user.id);
+  const activeDmPerson = activeDmPersonId ? directory.find((p) => p.id === activeDmPersonId) : null;
 
   return (
     <AppShell>
@@ -177,7 +238,9 @@ export default function ChatPage() {
             conversationId={activeConversationId}
             activeDmPerson={activeDmPerson}
             currentUserId={user.id}
-            people={people}
+            people={directory}
+            chatSocket={chatSocket}
+            connectionState={connectionState}
           />
         </div>
       </main>
@@ -190,13 +253,17 @@ function ConversationThread({
   activeDmPerson,
   currentUserId,
   people,
+  chatSocket,
+  connectionState,
 }: {
   conversationId: ConversationId;
   activeDmPerson: { id: string; name: string; role: string } | null | undefined;
   currentUserId: string;
   people: { id: string; name: string }[];
+  chatSocket: ChatSocketHandle | null;
+  connectionState: ChatConnectionState;
 }) {
-  const { messages, loadError, retry } = useConversationMessages(conversationId);
+  const { messages, loadError, retry } = useConversationMessages(conversationId, chatSocket, connectionState);
   const [draft, setDraft] = useState("");
   const [sendError, setSendError] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -235,6 +302,12 @@ function ConversationThread({
             <Hash size={16} className="text-outline" />
             <p className="text-body-md text-on-surface font-medium">General</p>
           </>
+        )}
+        {connectionState !== "connected" && (
+          <span className="ml-auto flex items-center gap-1.5 text-caption text-outline">
+            <span className="w-1.5 h-1.5 rounded-full bg-status-stuck animate-pulse" />
+            {connectionState === "connecting" ? "Connecting…" : "Reconnecting…"}
+          </span>
         )}
       </div>
 

@@ -6,11 +6,13 @@ import { Clock } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth";
 import { useClock } from "@/lib/clock";
+import { isExemptFromPersonalTimeClock } from "@/lib/roles";
 
 /**
  * One-time nudge shown after sign-in if the person isn't already clocked
  * in. Dismissing it is local component state, so it reappears on the next
- * fresh login/reload rather than persisting as a "seen" flag.
+ * fresh login/reload rather than persisting as a "seen" flag. Never shown
+ * to the CEO, who is exempt from personal clock-in (spec section 9).
  */
 export function ClockInPrompt() {
   const { user, status } = useAuth();
@@ -18,7 +20,12 @@ export function ClockInPrompt() {
   const [dismissed, setDismissed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const show = status === "authenticated" && !loading && !entry && !dismissed;
+  const show =
+    status === "authenticated" &&
+    !loading &&
+    !entry &&
+    !dismissed &&
+    !isExemptFromPersonalTimeClock(user?.accessRole);
 
   const handleClockIn = async () => {
     setSubmitting(true);

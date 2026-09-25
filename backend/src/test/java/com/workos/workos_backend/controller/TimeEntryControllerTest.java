@@ -104,9 +104,12 @@ class TimeEntryControllerTest {
 
     @Test
     void entriesForCeoWithNoFilterReturnsEveryPersonsEntries() {
-        grantSarahChenAccessRole("CEO");
+        // sarah-chen clocks in as a regular actor, *then* is promoted to CEO —
+        // CEO is exempt from clock-in itself (see clockInReturns403ForCeo), but
+        // still retains all-employees visibility over records that already exist.
         timeEntryService.clockIn("alex-morgan");
         mvc.post().uri("/api/time/clock-in").exchange();
+        grantSarahChenAccessRole("CEO");
 
         MvcTestResult result = mvc.get().uri("/api/time/entries").exchange();
 
@@ -116,15 +119,24 @@ class TimeEntryControllerTest {
 
     @Test
     void entriesForCeoWithPersonIdFilterScopesToThatPerson() {
-        grantSarahChenAccessRole("CEO");
         timeEntryService.clockIn("alex-morgan");
         mvc.post().uri("/api/time/clock-in").exchange();
+        grantSarahChenAccessRole("CEO");
 
         MvcTestResult result = mvc.get().uri("/api/time/entries?personId=sarah-chen").exchange();
 
         assertThat(result).hasStatusOk();
         assertThat(result).bodyJson().extractingPath("$").asArray().hasSize(1);
         assertThat(result).bodyJson().extractingPath("$[0].personId").isEqualTo("sarah-chen");
+    }
+
+    @Test
+    void clockInReturns403ForCeo() {
+        grantSarahChenAccessRole("CEO");
+
+        MvcTestResult result = mvc.post().uri("/api/time/clock-in").exchange();
+
+        assertThat(result).hasStatus(403);
     }
 
     @Test

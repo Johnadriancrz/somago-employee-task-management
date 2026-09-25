@@ -7,13 +7,13 @@ import { PageHeader } from "@/components/shell/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
-import { useBoard } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useClock, useElapsedLabel } from "@/lib/clock";
-import { fetchTimeEntries } from "@/lib/api-client";
-import { canViewAllTimeEntries } from "@/lib/roles";
+import { fetchEmployeeDirectory, fetchTimeEntries } from "@/lib/api-client";
+import { canViewAllTimeEntries, isExemptFromPersonalTimeClock } from "@/lib/roles";
+import { getTimeClockVisiblePeople } from "@/lib/time-clock";
 import { useRedirectIfUnauthenticated } from "@/lib/use-redirect-if-unauthenticated";
-import type { TimeEntry } from "@/lib/types";
+import type { Person, TimeEntry } from "@/lib/types";
 
 type RangeId = "day" | "thisWeek" | "week" | "month" | "all";
 
@@ -55,11 +55,14 @@ function formatHours(hours: number): string {
 }
 
 export default function TimeClockPage() {
-  const { people } = useBoard();
   const { user, status } = useAuth();
   const { entry, loading, clockIn, clockOut } = useClock();
   const elapsed = useElapsedLabel(entry?.clockIn ?? null);
   const [entries, setEntries] = useState<TimeEntry[]>([]);
+  // The real employee-account roster (same population as Admin's "Employee
+  // accounts" page) — not the board-wide `people` list, which also includes
+  // seeded/demo Person rows with no login that shouldn't appear here.
+  const [employeeDirectory, setEmployeeDirectory] = useState<Person[]>([]);
   // Captured only when data actually loads (inside the .then, not during
   // render) — an open entry's "hours so far" is measured against this
   // instead of a fresh Date.now() on every render.
@@ -74,6 +77,10 @@ export default function TimeClockPage() {
   // loading/unauthenticated, which correctly defaults to the most
   // restrictive ("own only") view rather than flashing the all-employee one.
   const canViewAll = canViewAllTimeEntries(user?.accessRole);
+  // Backend-enforced (TimeEntryService.clockIn rejects a CEO actor with
+  // 403) — this only decides whether the personal clock in/out card is
+  // offered, per spec section 9's CEO exemption.
+  const exemptFromClock = isExemptFromPersonalTimeClock(user?.accessRole);
 
   const loadEntries = useCallback(() => {
     fetchTimeEntries()
@@ -90,6 +97,14 @@ export default function TimeClockPage() {
   // instead of only refreshing on this page's own clock-in/out clicks.
   useEffect(loadEntries, [entry, loadEntries]);
 
+  const loadEmployeeDirectory = useCallback(() => {
+    fetchEmployeeDirectory()
+      .then(setEmployeeDirectory)
+      .catch((err) => console.error("Failed to load employee directory", err));
+  }, []);
+
+  useEffect(loadEmployeeDirectory, [loadEmployeeDirectory]);
+
   const getCutoff = RANGES.find((r) => r.id === range)?.getCutoff;
   const scopedEntries = useMemo(() => {
     const cutoff = getCutoff?.(asOf) ?? null;
@@ -98,12 +113,15 @@ export default function TimeClockPage() {
   }, [entries, getCutoff, asOf]);
 
   // The API already scopes `entries` to the caller's own rows for
-  // non-privileged roles, but `people` (from the board store) still lists
-  // everyone — narrow it here so the table only ever shows one's own row.
-  const visiblePeople = useMemo(() => {
-    if (canViewAll) return people;
-    return people.filter((p) => p.id === user?.id);
-  }, [people, canViewAll, user?.id]);
+  // non-privileged roles, but `employeeDirectory` still lists every real
+  // employee account — narrow it here so the table only ever shows one's
+  // own row (or every row for CEO/HR), and drop anyone exempt from personal
+  // time tracking (spec section 9) so e.g. the CEO never shows up as "Off
+  // the clock" in a table they can't personally appear in.
+  const visiblePeople = useMemo(
+    () => getTimeClockVisiblePeople(employeeDirectory, canViewAll, user?.id),
+    [employeeDirectory, canViewAll, user?.id],
+  );
 
   const perPerson = useMemo(() => {
     return visiblePeople
@@ -167,12 +185,14 @@ export default function TimeClockPage() {
                       <span className="w-1.5 h-1.5 rounded-full bg-status-done animate-pulse" />
                       On the clock · {elapsed ?? "0:00:00"}
                     </p>
+                  ) : exemptFromClock ? (
+                    <p className="text-caption text-secondary">Exempt from personal time tracking</p>
                   ) : (
                     <p className="text-caption text-secondary">Not clocked in</p>
                   )}
                 </div>
               </div>
-              {entry ? (
+              {exemptFromClock ? null : entry ? (
                 <Button
                   variant="ghost"
                   className="text-status-stuck hover:bg-status-stuck/10"

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import java.time.Instant;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitterTestSupport;
 
@@ -25,11 +26,18 @@ import com.workos.workos_backend.dto.ChatMessageResponse;
  * round-trip through MockMvc's async dispatch (which, for an emitter that
  * intentionally never times out, would risk hanging the test run).
  * ChatServiceTest and ChatControllerTest cover the permission checks that
- * gate this endpoint.
+ * gate this endpoint. The STOMP side ({@link ChatMessageBroadcaster#publish}
+ * also broadcasting to a {@link SimpMessagingTemplate}) is exercised here
+ * with a real template backed by a no-op {@code MessageChannel} — enough to
+ * prove {@code publish} doesn't blow up now that it does two things instead
+ * of one, without needing a Spring context or a full STOMP broker; the real
+ * delivery-over-a-live-connection behavior is covered by
+ * ChatWebSocketIntegrationTest.
  */
 class ChatMessageBroadcasterTest {
 
-    private final ChatMessageBroadcaster broadcaster = new ChatMessageBroadcaster();
+    private final ChatMessageBroadcaster broadcaster =
+            new ChatMessageBroadcaster(new SimpMessagingTemplate((message, timeout) -> true));
 
     private static ChatMessageResponse sampleMessage(String conversationId) {
         return new ChatMessageResponse("msg-1", conversationId, "sarah-chen", "hi", Instant.now().toString());

@@ -76,6 +76,13 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    void reportsEndpointRejectsARequestWithNoSessionCookieWith401() {
+        MvcTestResult result = mvc.get().uri("/api/reports/completed-tasks").exchange();
+
+        assertThat(result).hasStatus(401);
+    }
+
+    @Test
     void taskPatchEndpointRejectsARequestWithNoSessionCookieWith401() {
         MvcTestResult result = mvc.patch().uri("/api/tasks/does-not-matter")
                 .contentType(MediaType.APPLICATION_JSON)

@@ -125,6 +125,24 @@ export interface TimeEntry {
   clockOut: string | null;
 }
 
+/**
+ * One row of GET /api/reports/completed-tasks — a thin, server-filtered
+ * projection of a completed (`status === "done"`) Task, scoped server-side to
+ * the signed-in person's visible boards and, for non-privileged roles, to
+ * tasks they own or are assigned to (see BACKEND.md's Reports section). Not
+ * a `Task`: it carries only the fields the Reports page renders.
+ */
+export interface CompletedTaskReport {
+  taskId: string;
+  title: string;
+  boardId: BoardId;
+  boardName: string;
+  ownerId: string;
+  assigneeIds: string[];
+  dueDate: string;
+  end: string;
+}
+
 export const STATUS_LABEL: Record<Status, string> = {
   "not-started": "Not Started",
   working: "Working on it",

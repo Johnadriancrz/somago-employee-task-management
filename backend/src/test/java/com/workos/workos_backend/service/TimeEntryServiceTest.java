@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.TimeEntry;
 import com.workos.workos_backend.exception.ConflictException;
+import com.workos.workos_backend.exception.ForbiddenException;
 import com.workos.workos_backend.repository.TimeEntryRepository;
 
 import jakarta.persistence.EntityManager;
@@ -179,6 +180,14 @@ class TimeEntryServiceTest {
 
         assertThat(scoped).hasSize(1);
         assertThat(scoped.get(0).getPerson().getId()).isEqualTo("sarah-chen");
+    }
+
+    @Test
+    void clockInRejectsCeoWithForbidden() {
+        String ceoId = newAccount("CEO");
+
+        assertThatThrownBy(() -> timeEntryService.clockIn(ceoId))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

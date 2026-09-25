@@ -2,12 +2,17 @@
 
 import { Clock, LogOut } from "lucide-react";
 import { useClock, useElapsedLabel } from "@/lib/clock";
+import { useAuth } from "@/lib/auth";
+import { isExemptFromPersonalTimeClock } from "@/lib/roles";
 import { Button } from "@/components/ui/Button";
 
-/** Compact clock in/out control for the TopBar — visible on every page. */
+/** Compact clock in/out control for the TopBar — visible on every page except for the CEO (spec section 9 exemption). */
 export function ClockWidget() {
+  const { user } = useAuth();
   const { entry, loading, clockIn, clockOut } = useClock();
   const elapsed = useElapsedLabel(entry?.clockIn ?? null);
+
+  if (isExemptFromPersonalTimeClock(user?.accessRole)) return null;
 
   if (loading) return <div className="w-24 h-7 rounded-lg bg-surface-container-high animate-pulse hidden md:block" />;
 

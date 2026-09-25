@@ -2,6 +2,7 @@ import type {
   BoardId,
   BoardMeta,
   ChatMessage,
+  CompletedTaskReport,
   ConversationId,
   NewBoardInput,
   NewTaskInput,
@@ -25,7 +26,7 @@ import type {
  * Falls back to the local dev server so `npm run dev` works with no .env
  * file present — see .env.example to override it.
  */
-const SPRING_API_BASE_URL = process.env.NEXT_PUBLIC_SPRING_API_BASE_URL ?? "http://localhost:8080";
+export const SPRING_API_BASE_URL = process.env.NEXT_PUBLIC_SPRING_API_BASE_URL ?? "http://localhost:8080";
 
 let recoveringSession = false;
 
@@ -181,6 +182,27 @@ export function fetchPeople(): Promise<Person[]> {
   return springRequest("/api/people");
 }
 
+/**
+ * Chat's DM directory only — every Person with a real WorkOS login account
+ * (non-null accessRole), so Chat never offers a seeded/demo workspace-member
+ * Person who can't log in to read a DM. Scoped to Chat; every other
+ * Board/task/workspace consumer keeps using `fetchPeople()`.
+ */
+export function fetchChatDirectory(): Promise<Person[]> {
+  return springRequest("/api/people/chat-directory");
+}
+
+/**
+ * Time Clock's employee list only — every Person with a real employee
+ * account (non-null accessRole), matching the Admin "Employee accounts"
+ * page's population. Excludes seeded/demo Person rows that have no login.
+ * Scoped to Time Clock; every other Board/task/workspace consumer keeps
+ * using `fetchPeople()`.
+ */
+export function fetchEmployeeDirectory(): Promise<Person[]> {
+  return springRequest("/api/people/employee-directory");
+}
+
 // Combined reset
 
 /**
@@ -236,21 +258,34 @@ export function changePasswordRequest(currentPassword: string, newPassword: stri
 }
 
 // Chat
+//
+// Phase 2 of the WebSocket migration (see the Chat WebSocket audit) cuts
+// history/send over to the Spring Chat backend, so that sending a message
+// actually reaches ChatMessageBroadcaster and gets published to STOMP —
+// the Next.js in-memory Chat routes below never received traffic from either
+// of these functions in the first place (this is genuinely empty per-process
+// demo data, not persisted history), so nothing is lost by moving off them.
 
 export function fetchMessages(conversationId: ConversationId): Promise<ChatMessage[]> {
-  return request(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`);
+  return springRequest(`/api/chat/messages?conversationId=${encodeURIComponent(conversationId)}`);
 }
 
 export function sendMessageRequest(conversationId: ConversationId, text: string): Promise<ChatMessage> {
-  return request("/api/chat/messages", {
+  return springRequest("/api/chat/messages", {
     method: "POST",
     body: JSON.stringify({ conversationId, text }),
   });
 }
 
 /**
- * Opens a live SSE connection for a conversation. Returns a cleanup function
- * — call it (e.g. from a useEffect return) to close the connection.
+ * Opens a live SSE connection against the Next.js Chat stub. Retained,
+ * untouched, as the Phase 2 migration's fallback/rollback path (see BACKEND.md
+ * and the Chat WebSocket audit) — not currently called from the Chat page,
+ * which now gets live delivery from the Spring STOMP socket instead (see
+ * `lib/chat-socket.ts`). Since `fetchMessages`/`sendMessageRequest` above now
+ * target Spring, re-enabling this would need pointing it at Spring's own
+ * `GET /api/chat/stream` instead of the Next.js route below, which no longer
+ * observes any traffic.
  */
 export function openMessageStream(
   conversationId: ConversationId,
@@ -282,6 +317,19 @@ export function fetchTimeEntries(personId?: string): Promise<TimeEntry[]> {
   return springRequest(
     personId ? `/api/time/entries?personId=${encodeURIComponent(personId)}` : "/api/time/entries",
   );
+}
+
+// Reports
+
+/**
+ * Goes straight to the Spring Boot backend — see BACKEND.md's Reports
+ * section. The response is already scoped server-side to the signed-in
+ * person's visible boards and role (all completed tasks for CEO/Operation
+ * Manager, own-only for every other role) — this is the authoritative
+ * Reports dataset, not a client-side filter over `useBoard()`'s tasks.
+ */
+export function fetchCompletedTasks(): Promise<CompletedTaskReport[]> {
+  return springRequest("/api/reports/completed-tasks");
 }
 
 // Admin — a fully separate login/session from the workspace-user auth above.

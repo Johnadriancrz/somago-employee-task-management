@@ -36,6 +36,17 @@ export function canViewAllTimeEntries(accessRole: string | null | undefined): bo
   return hasAccessRole(accessRole, "CEO", "HR");
 }
 
+/**
+ * CEO is exempt from personal clock-in/out (spec section 9) — the backend
+ * rejects a CEO's own `POST /api/time/clock-in` with 403, so this only
+ * decides whether to show the personal clock-in controls (TopBar widget,
+ * the clock-in nag modal, the Time Clock page's own card), not whether the
+ * action is allowed.
+ */
+export function isExemptFromPersonalTimeClock(accessRole: string | null | undefined): boolean {
+  return hasAccessRole(accessRole, "CEO");
+}
+
 /** CEO and Operation Manager see every employee's Reports; everyone else sees only their own (spec section 10). */
 export function canViewAllReports(accessRole: string | null | undefined): boolean {
   return hasAccessRole(accessRole, "CEO", "Operation Manager");

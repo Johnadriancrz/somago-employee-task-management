@@ -533,7 +533,7 @@ plumbing — never for access-role gating (§4.1). Concretely:
 
 | Access Role | Own records | All employees' records |
 |---|---|---|
-| CEO | ✅ | ✅ |
+| CEO | Exempt | ✅ |
 | HR | ✅ | ✅ |
 | IT | ✅ | ❌ |
 | Graphics Designer | ✅ | ❌ |
@@ -541,6 +541,14 @@ plumbing — never for access-role gating (§4.1). Concretely:
 | Operation Manager | ✅ | ❌ |
 | Sales Assistant | ✅ | ❌ |
 | Sales Manager | ✅ | ❌ |
+
+**CEO exemption:** the CEO is not required to clock in/out personally. Enforced
+backend-side: `TimeEntryService.clockIn` rejects a CEO actor with 403 (`ForbiddenException`),
+regardless of what the frontend shows. Frontend-side (UX only, not enforcement, per the
+binding constraint below): the TopBar `ClockWidget`, the `ClockInPrompt` nag modal, and
+the Time Clock page's own personal clock in/out card are all hidden for the CEO
+(`isExemptFromPersonalTimeClock` in `src/lib/roles.ts`). This does not narrow the CEO's
+all-employees visibility (`GET /api/time/entries`), which is unchanged from the row above.
 
 **Binding constraint:** backend authorization is mandatory. A non-CEO/non-HR user must
 not be able to reach another employee's records by manipulating `personId`, query

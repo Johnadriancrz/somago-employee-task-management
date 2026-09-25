@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
@@ -10,10 +10,11 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Avatar } from "@/components/ui/Avatar";
 import { useBoard } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import { fetchCompletedTasks } from "@/lib/api-client";
 import { canViewAllReports } from "@/lib/roles";
 import { useRedirectIfUnauthenticated } from "@/lib/use-redirect-if-unauthenticated";
 import { BOARD_ICON_MAP } from "@/lib/board-icons";
-import type { BoardId, Task } from "@/lib/types";
+import type { CompletedTaskReport } from "@/lib/types";
 
 export default function ReportsHubPage() {
   const { boards, tasksByBoard, setActiveBoard, personById, openTaskOnBoard } = useBoard();
@@ -22,24 +23,37 @@ export default function ReportsHubPage() {
 
   useRedirectIfUnauthenticated();
 
-  // Server-enforced scope would live behind a real Reports endpoint (spec
-  // section 7.3 — none exists yet); until then this is a UX-only narrowing
-  // of the one Reports-shaped view this app has (completed tasks). Defaults
-  // to "own only" — the safe default — while user/accessRole is still
-  // loading, never the all-employee view.
+  // Presentation-only now (description text below) — the actual scope is
+  // enforced server-side by GET /api/reports/completed-tasks
+  // (ReportService: all completed tasks in visible boards for CEO/Operation
+  // Manager, owner-or-assignee only for every other role). Defaults to
+  // "own only" while user/accessRole is still loading, never the
+  // all-employee copy.
   const canViewAll = canViewAllReports(user?.accessRole);
 
-  const completedTasks = useMemo(() => {
-    const rows: { task: Task; boardId: BoardId }[] = [];
-    (Object.keys(tasksByBoard) as BoardId[]).forEach((boardId) => {
-      tasksByBoard[boardId].forEach((task) => {
-        if (task.status !== "done") return;
-        if (!canViewAll && task.ownerId !== user?.id && !(task.assigneeIds ?? []).includes(user?.id ?? "")) return;
-        rows.push({ task, boardId });
-      });
-    });
-    return rows.sort((a, b) => (a.task.end < b.task.end ? 1 : -1));
-  }, [tasksByBoard, canViewAll, user?.id]);
+  // null = still loading (or not yet fetched); [] = loaded, no completed
+  // tasks; non-empty = loaded with rows. completedTasksError distinguishes a
+  // failed request from a genuinely empty result, so a fetch failure never
+  // renders as "0 completed tasks".
+  const [completedTasks, setCompletedTasks] = useState<CompletedTaskReport[] | null>(null);
+  const [completedTasksError, setCompletedTasksError] = useState<string | null>(null);
+
+  // Matches the Admin roster / time-clock pages' loadX/useEffect(loadX, [...])
+  // pattern: the callback itself is the effect, not a wrapper that calls it
+  // synchronously from within an effect body.
+  const loadCompletedTasks = useCallback(() => {
+    if (status !== "authenticated") return;
+    fetchCompletedTasks()
+      .then((data) => {
+        setCompletedTasks(data);
+        setCompletedTasksError(null);
+      })
+      .catch((err) =>
+        setCompletedTasksError(err instanceof Error ? err.message : "Failed to load completed tasks"),
+      );
+  }, [status]);
+
+  useEffect(loadCompletedTasks, [loadCompletedTasks]);
 
   if (status === "loading") {
     return (
@@ -123,13 +137,27 @@ export default function ReportsHubPage() {
             <Panel padded={false} className="overflow-hidden">
               <div className="p-space-lg pb-space-sm">
                 <h2 className="text-headline-sm text-on-surface">Completed Tasks</h2>
-                <p className="text-body-sm text-secondary">
-                  {completedTasks.length} done{" "}
-                  {canViewAll ? "across every board in this workspace" : "of your own, across every board"}, with
-                  owner and assignees
-                </p>
+                {completedTasks !== null && !completedTasksError && (
+                  <p className="text-body-sm text-secondary">
+                    {completedTasks.length} done{" "}
+                    {canViewAll ? "across every board in this workspace" : "of your own, across every board"}, with
+                    owner and assignees
+                  </p>
+                )}
               </div>
-              {completedTasks.length === 0 ? (
+              {completedTasksError ? (
+                <div className="flex flex-col items-center gap-space-sm py-space-lg px-space-md text-center">
+                  <p className="text-body-sm text-status-stuck">{completedTasksError}</p>
+                  <button
+                    onClick={loadCompletedTasks}
+                    className="text-label-sm text-accent hover:opacity-80 transition-opacity"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : completedTasks === null ? (
+                <p className="text-body-sm text-secondary py-space-lg text-center">Loading completed tasks…</p>
+              ) : completedTasks.length === 0 ? (
                 <p className="text-body-sm text-secondary py-space-lg text-center">No completed tasks yet.</p>
               ) : (
                 <>
@@ -140,43 +168,40 @@ export default function ReportsHubPage() {
                     <span>Assigned</span>
                   </div>
                   <div className="divide-y divide-border-subtle">
-                    {completedTasks.map(({ task, boardId }) => {
-                      const board = boards.find((b) => b.id === boardId);
-                      return (
-                        <button
-                          key={`${boardId}-${task.id}`}
-                          type="button"
-                          onClick={() => openTaskOnBoard(boardId, task.id)}
-                          className="w-full grid grid-cols-1 sm:grid-cols-[1fr_140px_140px_160px] gap-space-sm sm:gap-space-md items-center px-space-lg py-space-sm text-left hover:bg-surface-subtle transition-colors"
-                        >
-                          <div className="min-w-0 flex items-center gap-2">
-                            <CheckCircle2 size={15} className="text-status-done shrink-0" />
-                            <div className="min-w-0">
-                              <h3 className="text-body-md font-medium text-on-surface truncate">{task.title}</h3>
-                              <span className="text-caption text-secondary">Completed {task.dueDate}</span>
+                    {completedTasks.map((item) => (
+                      <button
+                        key={item.taskId}
+                        type="button"
+                        onClick={() => openTaskOnBoard(item.boardId, item.taskId)}
+                        className="w-full grid grid-cols-1 sm:grid-cols-[1fr_140px_140px_160px] gap-space-sm sm:gap-space-md items-center px-space-lg py-space-sm text-left hover:bg-surface-subtle transition-colors"
+                      >
+                        <div className="min-w-0 flex items-center gap-2">
+                          <CheckCircle2 size={15} className="text-status-done shrink-0" />
+                          <div className="min-w-0">
+                            <h3 className="text-body-md font-medium text-on-surface truncate">{item.title}</h3>
+                            <span className="text-caption text-secondary">Completed {item.dueDate}</span>
+                          </div>
+                        </div>
+                        <span className="text-label-sm text-on-surface-variant truncate">{item.boardName}</span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Avatar personId={item.ownerId} size="sm" />
+                          <span className="text-label-sm text-on-surface-variant truncate">
+                            {personById(item.ownerId).name}
+                          </span>
+                        </div>
+                        <div>
+                          {item.assigneeIds.length > 0 ? (
+                            <div className="flex -space-x-1.5">
+                              {item.assigneeIds.map((id) => (
+                                <Avatar key={id} personId={id} size="sm" />
+                              ))}
                             </div>
-                          </div>
-                          <span className="text-label-sm text-on-surface-variant truncate">{board?.name}</span>
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <Avatar personId={task.ownerId} size="sm" />
-                            <span className="text-label-sm text-on-surface-variant truncate">
-                              {personById(task.ownerId).name}
-                            </span>
-                          </div>
-                          <div>
-                            {task.assigneeIds && task.assigneeIds.length > 0 ? (
-                              <div className="flex -space-x-1.5">
-                                {task.assigneeIds.map((id) => (
-                                  <Avatar key={id} personId={id} size="sm" />
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-label-sm text-outline">Unassigned</span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
+                          ) : (
+                            <span className="text-label-sm text-outline">Unassigned</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
                   </div>
                 </>
               )}

@@ -185,7 +185,7 @@ or posting to a DM you're not part of gets a 403.
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| POST | `/api/time/clock-in` | — | created `TimeEntry` (201), 409 if already clocked in |
+| POST | `/api/time/clock-in` | — | created `TimeEntry` (201), 409 if already clocked in, 403 if the actor is CEO (exempt from personal time clock) |
 | POST | `/api/time/clock-out` | — | closed `TimeEntry`, 409 if not clocked in |
 | GET | `/api/time/status` | — | the signed-in user's open `TimeEntry`, or `null` |
 | GET | `/api/time/entries?personId=...` | — | `TimeEntry[]` — workspace-wide for Human Resource/Finance/CEO/Operations Manager roles (`personId` optionally narrows to one person); every other role always gets just their own entries and `personId` is ignored |
@@ -196,6 +196,51 @@ from the request body. `GET /api/time/entries` checks the signed-in person's
 they get the workspace-wide KPI view or just their own entries; the
 `/time-clock` page mirrors this so non-privileged roles never see a table of
 other people's hours.
+
+**Reports**
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/api/reports/completed-tasks` | `CompletedTaskResponse[]` — completed tasks, scoped per the rules below, ordered by `end` descending |
+
+Requires an authenticated session (`workos_session` cookie) like every other
+endpoint below — the acting person is always resolved server-side
+(`ActingPersonResolver`/the session), never accepted from a request
+parameter or body field. There is no `personId` query parameter; a
+non-privileged caller cannot widen their own results by supplying one.
+
+A completed task is exactly `status === "done"` — never inferred from
+`dueDate`, `end`, subtask completion, or any timestamp (`Task` has no
+dedicated completion timestamp).
+
+**Scope** — always bounded by the same visible-board/workspace-membership
+boundary every other Board/Task endpoint enforces
+(`BoardService.listVisibleBoards`); a task on a board outside the caller's
+visible boards never appears, regardless of role. Within that boundary:
+
+- **CEO** — every completed task across the caller's visible boards.
+- **Operation Manager** — every completed task across the caller's visible
+  boards.
+- **Every other role** (HR, IT, Graphics Designer, Marketing, Sales
+  Assistant, Sales Manager, or no `accessRole` yet) — only completed tasks
+  where the caller is the owner or an assignee.
+
+CEO and Operation Manager do **not** get a cross-workspace bypass here — the
+Reports page's own copy ("across every board in this workspace") describes
+the visible-board boundary, not every workspace in the system.
+
+`CompletedTaskResponse` fields: `taskId`, `title`, `boardId`, `boardName`,
+`ownerId`, `assigneeIds` (`string[]`, possibly empty), `dueDate` (the
+existing display label), `end` (ISO date) — a thin projection of `Task`,
+carrying only what the Reports page renders (no subtasks, attachments,
+blocker/note, or progress).
+
+The board-level completion/stuck summary cards above the Completed Tasks
+list are unrelated to this endpoint — they still derive from the existing
+`GET /api/tasks` dataset (`useBoard()`'s `tasksByBoard`), which is itself
+already scoped to the caller's visible boards. Securing those cards the same
+way this endpoint secures the Completed Tasks list (if ever needed) would
+require a separate summary endpoint, not covered here.
 
 **Reset** (used by the "Reset demo data" button)
 

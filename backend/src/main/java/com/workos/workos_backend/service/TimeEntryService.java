@@ -13,6 +13,7 @@ import com.workos.workos_backend.authorization.AccessRoles;
 import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.TimeEntry;
 import com.workos.workos_backend.exception.ConflictException;
+import com.workos.workos_backend.exception.ForbiddenException;
 import com.workos.workos_backend.repository.PersonRepository;
 import com.workos.workos_backend.repository.TimeEntryRepository;
 
@@ -29,6 +30,12 @@ import com.workos.workos_backend.repository.TimeEntryRepository;
  * only their own, regardless of what {@code personIdFilter} the caller asks
  * for. This prevents an IDOR-style bypass by manipulating the
  * {@code personId} query parameter directly.
+ *
+ * <p>The CEO is exempt from personal clock-in/out (spec section 9):
+ * {@link #clockIn} rejects a CEO actor with {@link ForbiddenException},
+ * enforced here rather than left to the frontend hiding its clock-in
+ * controls, matching this codebase's convention that frontend gating is
+ * UX-only and never the actual enforcement point.
  */
 @Service
 public class TimeEntryService {
@@ -46,6 +53,9 @@ public class TimeEntryService {
 
     @Transactional
     public TimeEntry clockIn(String actorId) {
+        if (accessRoleChecker.actorHasAnyRole(actorId, AccessRoles.CEO)) {
+            throw new ForbiddenException("CEO is exempt from personal time clock");
+        }
         if (timeEntryRepository.findByPersonIdAndClockOutIsNull(actorId).isPresent()) {
             throw new ConflictException("Already clocked in");
         }

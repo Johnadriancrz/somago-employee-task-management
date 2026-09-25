@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@stomp/stompjs": "^7.3.0",
     "docx": "^9.7.1",
     "exceljs": "^4.4.0",
     "lucide-react": "^1.45.0",

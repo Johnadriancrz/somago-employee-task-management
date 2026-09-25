@@ -24,4 +24,31 @@ public class PersonController {
     public List<PersonResponse> list() {
         return personService.listPeople().stream().map(PersonResponse::from).toList();
     }
+
+    /**
+     * Chat-specific: only Person rows with a real WorkOS login account
+     * (non-null accessRole), so Chat's DM directory never offers a seeded
+     * demo Person who can't log in to read the conversation. Scoped to this
+     * endpoint only - {@code GET /api/people} itself is unchanged for
+     * Board/task/workspace-member consumers that need every Person row. No
+     * auth required, same as {@code GET /api/people}.
+     */
+    @GetMapping("/chat-directory")
+    public List<PersonResponse> listChatDirectory() {
+        return personService.listChatDirectory().stream().map(PersonResponse::from).toList();
+    }
+
+    /**
+     * Time Clock-specific: only Person rows with a real employee account
+     * (non-null accessRole) - the same population the Admin "Employee
+     * accounts" page shows, so Time Clock never lists a seeded/demo Person
+     * who has no login. Scoped to this endpoint only - {@code GET
+     * /api/people} itself is unchanged. No auth required, same as {@code GET
+     * /api/people}/{@code /chat-directory} - Time Clock is used by every
+     * employee, not just CEO/HR/Admin.
+     */
+    @GetMapping("/employee-directory")
+    public List<PersonResponse> listEmployeeDirectory() {
+        return personService.listEmployeeDirectory().stream().map(PersonResponse::from).toList();
+    }
 }
