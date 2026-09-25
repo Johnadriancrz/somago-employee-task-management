@@ -9,22 +9,57 @@ import { Panel } from "@/components/ui/Panel";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Avatar } from "@/components/ui/Avatar";
 import { useBoard } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
+import { canViewAllReports } from "@/lib/roles";
+import { useRedirectIfUnauthenticated } from "@/lib/use-redirect-if-unauthenticated";
 import { BOARD_ICON_MAP } from "@/lib/board-icons";
 import type { BoardId, Task } from "@/lib/types";
 
 export default function ReportsHubPage() {
   const { boards, tasksByBoard, setActiveBoard, personById, openTaskOnBoard } = useBoard();
+  const { user, status } = useAuth();
   const router = useRouter();
+
+  useRedirectIfUnauthenticated();
+
+  // Server-enforced scope would live behind a real Reports endpoint (spec
+  // section 7.3 — none exists yet); until then this is a UX-only narrowing
+  // of the one Reports-shaped view this app has (completed tasks). Defaults
+  // to "own only" — the safe default — while user/accessRole is still
+  // loading, never the all-employee view.
+  const canViewAll = canViewAllReports(user?.accessRole);
 
   const completedTasks = useMemo(() => {
     const rows: { task: Task; boardId: BoardId }[] = [];
     (Object.keys(tasksByBoard) as BoardId[]).forEach((boardId) => {
       tasksByBoard[boardId].forEach((task) => {
-        if (task.status === "done") rows.push({ task, boardId });
+        if (task.status !== "done") return;
+        if (!canViewAll && task.ownerId !== user?.id && !(task.assigneeIds ?? []).includes(user?.id ?? "")) return;
+        rows.push({ task, boardId });
       });
     });
     return rows.sort((a, b) => (a.task.end < b.task.end ? 1 : -1));
-  }, [tasksByBoard]);
+  }, [tasksByBoard, canViewAll, user?.id]);
+
+  if (status === "loading") {
+    return (
+      <AppShell>
+        <main className="w-full pt-14 h-screen flex items-center justify-center">
+          <span className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin text-secondary" />
+        </main>
+      </AppShell>
+    );
+  }
+
+  if (status === "unauthenticated" || !user) {
+    return (
+      <AppShell>
+        <main className="w-full pt-14 h-screen flex items-center justify-center">
+          <p className="text-body-sm text-secondary">Your session has expired — signing you out…</p>
+        </main>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -32,7 +67,11 @@ export default function ReportsHubPage() {
         <div className="px-space-md md:px-space-xl py-space-lg max-w-6xl mx-auto">
           <PageHeader
             title="Reports"
-            description="A quick health check across every board in this workspace."
+            description={
+              canViewAll
+                ? "A quick health check across every board in this workspace (CEO and Operation Manager access)."
+                : "A quick health check on your own tasks across every board in this workspace."
+            }
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-space-md">
@@ -85,7 +124,9 @@ export default function ReportsHubPage() {
               <div className="p-space-lg pb-space-sm">
                 <h2 className="text-headline-sm text-on-surface">Completed Tasks</h2>
                 <p className="text-body-sm text-secondary">
-                  {completedTasks.length} done across every board in this workspace, with owner and assignees
+                  {completedTasks.length} done{" "}
+                  {canViewAll ? "across every board in this workspace" : "of your own, across every board"}, with
+                  owner and assignees
                 </p>
               </div>
               {completedTasks.length === 0 ? (

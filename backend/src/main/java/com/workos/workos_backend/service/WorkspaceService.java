@@ -6,6 +6,8 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.workos.workos_backend.authorization.AccessRoleChecker;
+import com.workos.workos_backend.authorization.AccessRoles;
 import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.Workspace;
 import com.workos.workos_backend.exception.ForbiddenException;
@@ -18,16 +20,28 @@ import com.workos.workos_backend.repository.WorkspaceRepository;
  * from BACKEND.md's Workspaces table: visibility is owner-or-member,
  * delete/add-member/remove-member are owner-only, and the owner can never
  * be removed as a member.
+ *
+ * <p>Spec section 12: CEO may additionally manage membership (add/remove)
+ * on any workspace regardless of ownership — a purely additive bypass on
+ * top of the existing owner-only gate. Operation Manager's broader
+ * "workspaces they are authorized to manage" scope beyond ones they own is
+ * an open product decision (spec section 20 item 5) with no schema
+ * representation yet, and is intentionally not guessed at here; an
+ * Operation Manager who owns a workspace is already covered by the
+ * existing owner-only gate, unchanged.
  */
 @Service
 public class WorkspaceService {
 
     private final WorkspaceRepository workspaceRepository;
     private final PersonRepository personRepository;
+    private final AccessRoleChecker accessRoleChecker;
 
-    public WorkspaceService(WorkspaceRepository workspaceRepository, PersonRepository personRepository) {
+    public WorkspaceService(WorkspaceRepository workspaceRepository, PersonRepository personRepository,
+            AccessRoleChecker accessRoleChecker) {
         this.workspaceRepository = workspaceRepository;
         this.personRepository = personRepository;
+        this.accessRoleChecker = accessRoleChecker;
     }
 
     /**
@@ -67,7 +81,7 @@ public class WorkspaceService {
     @Transactional
     public Workspace addMember(String actorId, String workspaceId, String targetPersonId) {
         Workspace workspace = getOrThrow(workspaceId);
-        requireOwner(workspace, actorId, "Only the workspace owner can add members");
+        requireOwnerOrCeo(workspace, actorId, "Only the workspace owner or a CEO can add members");
         Person target = personRepository.findById(targetPersonId)
                 .orElseThrow(() -> new ResourceNotFoundException("Unknown person id: " + targetPersonId));
         workspace.addMember(target);
@@ -77,7 +91,7 @@ public class WorkspaceService {
     @Transactional
     public Workspace removeMember(String actorId, String workspaceId, String targetPersonId) {
         Workspace workspace = getOrThrow(workspaceId);
-        requireOwner(workspace, actorId, "Only the workspace owner can remove members");
+        requireOwnerOrCeo(workspace, actorId, "Only the workspace owner or a CEO can remove members");
         if (workspace.getOwner().getId().equals(targetPersonId)) {
             throw new IllegalArgumentException("The workspace owner can't be removed");
         }
@@ -88,6 +102,16 @@ public class WorkspaceService {
     private Workspace getOrThrow(String workspaceId) {
         return workspaceRepository.findById(workspaceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + workspaceId));
+    }
+
+    private void requireOwnerOrCeo(Workspace workspace, String actorId, String message) {
+        if (workspace.getOwner().getId().equals(actorId)) {
+            return;
+        }
+        if (accessRoleChecker.actorHasAnyRole(actorId, AccessRoles.CEO)) {
+            return;
+        }
+        throw new ForbiddenException(message);
     }
 
     private void requireOwner(Workspace workspace, String actorId, String message) {

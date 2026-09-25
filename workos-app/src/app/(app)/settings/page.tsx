@@ -99,35 +99,68 @@ export default function SettingsPage() {
             </div>
           </Panel>
 
-          <Panel className="flex items-center justify-between gap-space-md flex-wrap border border-status-stuck/20">
-            <div className="flex items-center gap-space-md">
-              <div className="w-10 h-10 rounded-lg bg-status-stuck/10 text-status-stuck flex items-center justify-center shrink-0">
-                <AlertTriangle size={18} />
-              </div>
-              <div>
-                <h2 className="text-headline-sm text-on-surface">Reset demo data</h2>
-                <p className="text-body-sm text-secondary">Clears all local edits and restores every workspace and board to its original sample data.</p>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              className="text-status-stuck hover:bg-status-stuck/10"
-              onClick={async () => {
-                const ok = await confirm({
-                  title: "Reset demo data?",
-                  description: "This clears any local edits and restores every workspace and board to its original sample data.",
-                  confirmLabel: "Reset",
-                  tone: "danger",
-                });
-                if (ok) resetAllData();
-              }}
-            >
-              Reset
-            </Button>
-          </Panel>
+          <ResetDemoDataPanel resetAllData={resetAllData} confirm={confirm} />
         </div>
       </main>
     </AppShell>
+  );
+}
+
+function ResetDemoDataPanel({
+  resetAllData,
+  confirm,
+}: {
+  resetAllData: () => Promise<void>;
+  confirm: ReturnType<typeof useConfirm>;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+
+  const handleReset = async () => {
+    const ok = await confirm({
+      title: "Reset demo data?",
+      description: "This clears any local edits and restores every workspace and board to its original sample data.",
+      confirmLabel: "Reset",
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    setResetting(true);
+    setError(null);
+    try {
+      await resetAllData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reset demo data");
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  return (
+    <Panel className="flex flex-col gap-space-md border border-status-stuck/20">
+      <div className="flex items-center justify-between gap-space-md flex-wrap">
+        <div className="flex items-center gap-space-md">
+          <div className="w-10 h-10 rounded-lg bg-status-stuck/10 text-status-stuck flex items-center justify-center shrink-0">
+            <AlertTriangle size={18} />
+          </div>
+          <div>
+            <h2 className="text-headline-sm text-on-surface">Reset demo data</h2>
+            <p className="text-body-sm text-secondary">Clears all local edits and restores every workspace and board to its original sample data.</p>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          className="text-status-stuck hover:bg-status-stuck/10"
+          disabled={resetting}
+          onClick={handleReset}
+        >
+          {resetting ? "Resetting…" : "Reset"}
+        </Button>
+      </div>
+      {error && (
+        <p className="text-body-sm text-status-stuck bg-status-stuck/10 rounded-lg px-space-sm py-2">{error}</p>
+      )}
+    </Panel>
   );
 }
 
@@ -195,7 +228,7 @@ function PasswordChangeForm() {
 
   const mismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
   const canSubmit =
-    currentPassword.length > 0 && newPassword.length >= 6 && newPassword === confirmPassword && !submitting;
+    currentPassword.length > 0 && newPassword.length >= 8 && newPassword === confirmPassword && !submitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

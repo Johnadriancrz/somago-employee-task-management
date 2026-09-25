@@ -1,56 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Eye, EyeOff, LogOut, Plus, ShieldCheck, Trash2, UserRound, X } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, LogOut, Plus, ShieldCheck, UserRound, X } from "lucide-react";
 import { useAdminAuth } from "@/lib/admin-auth";
-import { useConfirm } from "@/lib/confirm";
-import { createPersonRequest, deletePersonRequest, fetchAdminPeople } from "@/lib/api-client";
+import { createAccountRequest, fetchAccountsRequest } from "@/lib/api-client";
+import { ACCESS_ROLES } from "@/lib/roles";
 import type { Person } from "@/lib/types";
 
 export default function AdminPage() {
   const { admin, status, logout } = useAdminAuth();
   const router = useRouter();
-  const confirm = useConfirm();
 
-  const [people, setPeople] = useState<Person[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // The persisted employee-account roster (GET /api/accounts), fetched after
+  // Admin auth succeeds — not just accounts created during this page session.
+  const [accounts, setAccounts] = useState<Person[] | null>(null);
+  const [rosterError, setRosterError] = useState<string | null>(null);
   const [showNewAccount, setShowNewAccount] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Matches the time-clock page's loadEntries/useEffect(loadX, [...]) pattern:
+  // the callback itself is the effect, rather than a wrapper that calls it
+  // synchronously from within an effect body.
+  const loadAccounts = useCallback(() => {
     if (status !== "authenticated") return;
-    fetchAdminPeople()
-      .then(setPeople)
-      .catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load accounts"));
+    fetchAccountsRequest()
+      .then((roster) => {
+        setAccounts(roster);
+        setRosterError(null);
+      })
+      .catch((err) =>
+        setRosterError(err instanceof Error ? err.message : "Failed to load employee accounts"),
+      );
   }, [status]);
 
   useEffect(() => {
     // proxy.ts only checks that the admin cookie is present, not that the
     // session behind it is still valid (e.g. after a server restart clears
-    // the in-memory session store) — so a stale-but-present cookie can get
-    // past it and land here unauthenticated. Redirect instead of rendering
-    // blank.
+    // the session store) — so a stale-but-present cookie can get past it and
+    // land here unauthenticated. Redirect instead of rendering blank.
     if (status === "unauthenticated") {
       router.push("/admin/login");
     }
   }, [status, router]);
 
+  useEffect(loadAccounts, [loadAccounts]);
+
+  useEffect(() => {
+    if (!successMessage) return;
+    const timer = setTimeout(() => setSuccessMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [successMessage]);
+
   const handleLogout = async () => {
     await logout();
     router.push("/admin/login");
-  };
-
-  const handleDelete = async (person: Person) => {
-    const ok = await confirm({
-      title: `Delete "${person.name}"?`,
-      description: "This can't be undone. Tasks they own or are assigned to will show as unassigned.",
-      confirmLabel: "Delete account",
-      tone: "danger",
-    });
-    if (!ok) return;
-    await deletePersonRequest(person.id);
-    setPeople((prev) => prev?.filter((p) => p.id !== person.id) ?? prev);
   };
 
   if (status === "loading") {
@@ -86,10 +91,8 @@ export default function AdminPage() {
       <div className="max-w-3xl mx-auto px-space-lg py-space-lg flex flex-col gap-space-lg">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-headline-md text-on-surface">Accounts</h2>
-            <p className="text-body-sm text-secondary">
-              {people ? `${people.length} account${people.length === 1 ? "" : "s"}` : "Loading…"}
-            </p>
+            <h2 className="text-headline-md text-on-surface">Employee accounts</h2>
+            <p className="text-body-sm text-secondary">Create a login for a new employee.</p>
           </div>
           <button
             onClick={() => setShowNewAccount(true)}
@@ -100,16 +103,33 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {loadError && (
-          <p className="text-body-sm text-status-stuck bg-status-stuck/10 rounded-lg px-space-sm py-2">{loadError}</p>
+        {successMessage && (
+          <p className="flex items-center gap-2 text-body-sm text-status-done bg-status-done/10 rounded-lg px-space-sm py-2">
+            <CheckCircle2 size={15} className="shrink-0" />
+            {successMessage}
+          </p>
         )}
 
         <div className="bg-canvas-bg rounded-xl shadow-sm divide-y divide-border-subtle overflow-hidden">
-          {people?.length === 0 && (
-            <p className="text-body-sm text-secondary text-center py-space-lg">No accounts yet.</p>
+          {accounts === null && !rosterError && (
+            <p className="text-body-sm text-secondary text-center py-space-lg">Loading employee accounts…</p>
           )}
-          {people?.map((person) => (
-            <div key={person.id} className="flex items-center gap-space-md px-space-md py-space-sm group">
+          {rosterError && (
+            <div className="flex flex-col items-center gap-space-sm py-space-lg px-space-md text-center">
+              <p className="text-body-sm text-status-stuck">{rosterError}</p>
+              <button
+                onClick={loadAccounts}
+                className="text-label-sm text-accent hover:opacity-80 transition-opacity"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+          {accounts !== null && !rosterError && accounts.length === 0 && (
+            <p className="text-body-sm text-secondary text-center py-space-lg">No employee accounts yet.</p>
+          )}
+          {accounts?.map((person) => (
+            <div key={person.id} className="flex items-center gap-space-md px-space-md py-space-sm">
               <div
                 className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold text-label-sm shrink-0 ${person.chipClass}`}
               >
@@ -120,15 +140,8 @@ export default function AdminPage() {
                 <p className="text-caption text-secondary truncate">{person.email}</p>
               </div>
               <span className="text-label-sm text-on-surface-variant bg-surface-subtle px-2 py-1 rounded-lg shrink-0">
-                {person.role || "—"}
+                {person.accessRole || "—"}
               </span>
-              <button
-                onClick={() => handleDelete(person)}
-                title="Delete account"
-                className="p-1.5 rounded-lg text-outline opacity-0 group-hover:opacity-100 hover:text-status-stuck hover:bg-status-stuck/10 shrink-0 transition-colors"
-              >
-                <Trash2 size={15} />
-              </button>
             </div>
           ))}
         </div>
@@ -137,7 +150,10 @@ export default function AdminPage() {
       <NewAccountDialog
         open={showNewAccount}
         onClose={() => setShowNewAccount(false)}
-        onCreated={(person) => setPeople((prev) => [...(prev ?? []), person])}
+        onCreated={(person) => {
+          loadAccounts();
+          setSuccessMessage(`Created account for ${person.name} (${person.accessRole}).`);
+        }}
       />
     </main>
   );
@@ -156,7 +172,7 @@ function NewAccountDialog({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState("");
+  const [accessRole, setAccessRole] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -165,26 +181,22 @@ function NewAccountDialog({
     setEmail("");
     setPassword("");
     setShowPassword(false);
-    setRole("");
+    setAccessRole("");
     setError(null);
   };
 
+  const canSubmit = !!name.trim() && !!email.trim() && password.length >= 8 && !!accessRole;
+
   const handleCreate = async () => {
-    if (!name.trim() || !email.trim()) return;
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
+    if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      const person = await createPersonRequest({
+      const person = await createAccountRequest({
         name: name.trim(),
         email: email.trim(),
         password,
-        role: role.trim(),
-        initials: "",
-        chipClass: "",
+        accessRole,
       });
       onCreated(person);
       reset();
@@ -267,7 +279,7 @@ function NewAccountDialog({
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                   className="w-full bg-surface-subtle rounded-lg px-space-sm py-space-sm pr-9 text-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-accent/30"
                 />
                 <button
@@ -281,16 +293,23 @@ function NewAccountDialog({
               </div>
             </div>
             <div>
-              <label className="text-label-sm text-outline uppercase tracking-wider block mb-space-xs">Role</label>
-              <input
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreate();
-                }}
-                placeholder="e.g. Product Designer"
+              <label className="text-label-sm text-outline uppercase tracking-wider block mb-space-xs">
+                Access role
+              </label>
+              <select
+                value={accessRole}
+                onChange={(e) => setAccessRole(e.target.value)}
                 className="w-full bg-surface-subtle rounded-lg px-space-sm py-space-sm text-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-accent/30"
-              />
+              >
+                <option value="" disabled>
+                  Select a role
+                </option>
+                {ACCESS_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex items-center justify-end gap-space-sm">
@@ -305,7 +324,7 @@ function NewAccountDialog({
               </button>
               <button
                 onClick={handleCreate}
-                disabled={!name.trim() || !email.trim() || password.length < 6 || submitting}
+                disabled={!canSubmit || submitting}
                 className="bg-accent text-on-accent hover:opacity-90 transition-opacity rounded-lg px-space-md py-1.5 text-label-md font-medium disabled:opacity-50 disabled:pointer-events-none"
               >
                 Create account

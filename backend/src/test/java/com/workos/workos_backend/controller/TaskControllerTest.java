@@ -3,6 +3,7 @@ package com.workos.workos_backend.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,8 +19,11 @@ import com.workos.workos_backend.dto.AttachmentInput;
 import com.workos.workos_backend.dto.CreateTaskRequest;
 import com.workos.workos_backend.dto.UpdateTaskRequest;
 import com.workos.workos_backend.entity.BoardMeta;
+import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.Task;
 import com.workos.workos_backend.entity.Workspace;
+import com.workos.workos_backend.repository.PersonRepository;
+import com.workos.workos_backend.service.AccountService;
 import com.workos.workos_backend.service.BoardService;
 import com.workos.workos_backend.service.TaskService;
 import com.workos.workos_backend.service.WorkspaceService;
@@ -50,12 +54,36 @@ class TaskControllerTest {
     @Autowired
     private TaskService taskService;
 
+    @Autowired
+    private AccountService accountService;
+
+    @Autowired
+    private PersonRepository personRepository;
+
+    private void grantSarahChenAccessRole(String accessRole) {
+        Person sarahChen = personRepository.findById("sarah-chen").orElseThrow();
+        sarahChen.setAccessRole(accessRole);
+        personRepository.save(sarahChen);
+    }
+
     private BoardMeta newBoard(String ownerId, String... extraMemberIds) {
         Workspace workspace = workspaceService.createWorkspace(ownerId, "Ws " + System.nanoTime(), "WS");
         for (String memberId : extraMemberIds) {
             workspaceService.addMember(ownerId, workspace.getId(), memberId);
         }
         return boardService.createBoard(ownerId, workspace.getId(), "Board", "", "table");
+    }
+
+    /**
+     * Mints a fresh Operation Manager and adds them to the board's workspace,
+     * so they can perform work-assignment actions (spec section 11) the
+     * board's owner/assignee alone no longer can post-Phase-4.
+     */
+    private String newOperationManagerMember(BoardMeta board, String workspaceOwnerId) {
+        String omId = accountService.createAccount(
+                "OM", "om-" + UUID.randomUUID() + "@workos.dev", "Password123!", "Operation Manager").getId();
+        workspaceService.addMember(workspaceOwnerId, board.getWorkspace().getId(), omId);
+        return omId;
     }
 
     private Task newTask(String ownerId, String boardId) {
@@ -219,8 +247,9 @@ class TaskControllerTest {
     @Test
     void patchForbiddenForCoreFieldWhenActorIsOnlyAnAssignee() {
         BoardMeta board = newBoard("alex-morgan", "sarah-chen");
-        Task task = newTask("alex-morgan", board.getId());
-        taskService.updateTask("alex-morgan", task.getId(), new UpdateTaskRequest(
+        String omId = newOperationManagerMember(board, "alex-morgan");
+        Task task = newTask(omId, board.getId());
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, null, List.of("sarah-chen"), null, null, null, null, null, null, null,
                 null, null, null, null, null));
 
@@ -235,8 +264,9 @@ class TaskControllerTest {
     @Test
     void patchAllowsAssigneeToEditProgressFields() {
         BoardMeta board = newBoard("alex-morgan", "sarah-chen");
-        Task task = newTask("alex-morgan", board.getId());
-        taskService.updateTask("alex-morgan", task.getId(), new UpdateTaskRequest(
+        String omId = newOperationManagerMember(board, "alex-morgan");
+        Task task = newTask(omId, board.getId());
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, null, List.of("sarah-chen"), null, null, null, null, null, null, null,
                 null, null, null, null, null));
 
@@ -271,8 +301,9 @@ class TaskControllerTest {
     @Test
     void patchAllowsAssigneeToAddAttachment() {
         BoardMeta board = newBoard("alex-morgan", "sarah-chen");
-        Task task = newTask("alex-morgan", board.getId());
-        taskService.updateTask("alex-morgan", task.getId(), new UpdateTaskRequest(
+        String omId = newOperationManagerMember(board, "alex-morgan");
+        Task task = newTask(omId, board.getId());
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, null, List.of("sarah-chen"), null, null, null, null, null, null, null,
                 null, null, null, null, null));
 
@@ -323,8 +354,9 @@ class TaskControllerTest {
     @Test
     void deleteForbiddenForAssigneeWhoIsNotOwner() {
         BoardMeta board = newBoard("alex-morgan", "sarah-chen");
-        Task task = newTask("alex-morgan", board.getId());
-        taskService.updateTask("alex-morgan", task.getId(), new UpdateTaskRequest(
+        String omId = newOperationManagerMember(board, "alex-morgan");
+        Task task = newTask(omId, board.getId());
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, null, List.of("sarah-chen"), null, null, null, null, null, null, null,
                 null, null, null, null, null));
 
@@ -337,5 +369,96 @@ class TaskControllerTest {
     void deleteUnknownTaskReturns404() {
         MvcTestResult result = mvc.delete().uri("/api/tasks/does-not-exist").exchange();
         assertThat(result).hasStatus(404);
+    }
+
+    @Test
+    void createWithAssigneeIdsForbiddenForNonPrivilegedActor() {
+        BoardMeta board = newBoard("sarah-chen");
+
+        MvcTestResult result = mvc.post().uri("/api/tasks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{"
+                        + "\"boardId\": \"" + board.getId() + "\","
+                        + "\"title\": \"Ship the thing\","
+                        + "\"group\": \"this-week\","
+                        + "\"status\": \"not-started\","
+                        + "\"assigneeIds\": [\"sarah-chen\"],"
+                        + "\"priority\": 3,"
+                        + "\"dueDate\": \"Sep 19\","
+                        + "\"start\": \"2025-09-01\","
+                        + "\"end\": \"2025-09-19\","
+                        + "\"progress\": 0"
+                        + "}")
+                .exchange();
+
+        assertThat(result).hasStatus(403);
+    }
+
+    @Test
+    void createWithAssigneeIdsSucceedsForCeo() {
+        BoardMeta board = newBoard("sarah-chen");
+        grantSarahChenAccessRole("CEO");
+
+        MvcTestResult result = mvc.post().uri("/api/tasks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{"
+                        + "\"boardId\": \"" + board.getId() + "\","
+                        + "\"title\": \"Ship the thing\","
+                        + "\"group\": \"this-week\","
+                        + "\"status\": \"not-started\","
+                        + "\"assigneeIds\": [\"sarah-chen\"],"
+                        + "\"priority\": 3,"
+                        + "\"dueDate\": \"Sep 19\","
+                        + "\"start\": \"2025-09-01\","
+                        + "\"end\": \"2025-09-19\","
+                        + "\"progress\": 0"
+                        + "}")
+                .exchange();
+
+        assertThat(result).hasStatus(201);
+        assertThat(result).bodyJson().extractingPath("$.assigneeIds").asArray().containsExactly("sarah-chen");
+    }
+
+    @Test
+    void patchOwnerCannotReassignOwnerIdWithoutCeoOrOperationManagerRole() {
+        BoardMeta board = newBoard("sarah-chen");
+        Task task = newTask("sarah-chen", board.getId());
+
+        MvcTestResult result = mvc.patch().uri("/api/tasks/{id}", task.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ownerId\": \"alex-morgan\"}")
+                .exchange();
+
+        assertThat(result).hasStatus(403);
+    }
+
+    @Test
+    void patchOwnerCanReassignOwnerIdWhenGrantedCeoRole() {
+        BoardMeta board = newBoard("sarah-chen");
+        Task task = newTask("sarah-chen", board.getId());
+        grantSarahChenAccessRole("CEO");
+
+        MvcTestResult result = mvc.patch().uri("/api/tasks/{id}", task.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ownerId\": \"alex-morgan\"}")
+                .exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result).bodyJson().extractingPath("$.ownerId").isEqualTo("alex-morgan");
+    }
+
+    @Test
+    void patchOwnerCanReassignOwnerIdWhenGrantedOperationManagerRole() {
+        BoardMeta board = newBoard("sarah-chen");
+        Task task = newTask("sarah-chen", board.getId());
+        grantSarahChenAccessRole("Operation Manager");
+
+        MvcTestResult result = mvc.patch().uri("/api/tasks/{id}", task.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"assigneeIds\": [\"alex-morgan\"]}")
+                .exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result).bodyJson().extractingPath("$.assigneeIds").asArray().containsExactly("alex-morgan");
     }
 }

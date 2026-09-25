@@ -115,18 +115,6 @@ function AdminLoginForm() {
             </button>
           </form>
         </div>
-
-        <details className="w-full text-center">
-          <summary className="text-caption text-inverse-on-surface/70 cursor-pointer select-none hover:text-inverse-on-surface transition-colors">
-            Demo admin login
-          </summary>
-          <div className="mt-space-sm bg-canvas-bg rounded-xl p-space-sm text-left">
-            <p className="text-caption text-secondary">
-              <span className="font-mono text-on-surface">admin@workos.dev</span> /{" "}
-              <span className="font-mono text-on-surface">admin1234</span>
-            </p>
-          </div>
-        </details>
       </div>
     </main>
   );

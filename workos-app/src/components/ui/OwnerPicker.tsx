@@ -22,7 +22,7 @@ export function OwnerPicker({
   size?: "sm" | "md";
   /** Which edge the dropdown hangs from — "right" avoids overflow near a row's left edge, "left" avoids it near the right edge. */
   align?: "left" | "right";
-  /** Only the task's owner may reassign it — everyone else sees the avatar but can't open the picker. */
+  /** Only CEO/Operation Manager, and only while they're also the task's current owner, may reassign it (spec section 11) — everyone else sees the avatar but can't open the picker. */
   disabled?: boolean;
 }) {
   const { people, updateTask } = useBoard();
@@ -33,7 +33,7 @@ export function OwnerPicker({
       <button
         type="button"
         onClick={() => !disabled && setOpen((v) => !v)}
-        title={disabled ? "Only the task owner can reassign this" : undefined}
+        title={disabled ? "Only CEO or Operation Manager can reassign this" : undefined}
         className={`rounded-full transition-shadow ${disabled ? "cursor-default" : "hover:ring-2 hover:ring-primary-container/50"}`}
       >
         <Avatar personId={ownerId} size={size} />

@@ -137,7 +137,7 @@ function TaskForm({
   const { closePanel, updateTask, addTask, deleteTask, people } = useBoard();
   const { user } = useAuth();
   const confirm = useConfirm();
-  const { isOwner, isAssignee, canEditCore, canEditProgress } = useTaskPermissions(editingTask);
+  const { isOwner, isAssignee, canEditCore, canEditProgress, canAssign } = useTaskPermissions(editingTask);
   const [form, setForm] = useState<FormState>(() =>
     initialFormFor(editingTask, user?.id ?? people[0]?.id ?? "", defaults),
   );
@@ -284,7 +284,7 @@ function TaskForm({
               <select
                 value={form.ownerId}
                 onChange={(e) => set("ownerId", e.target.value)}
-                disabled={!canEditCore}
+                disabled={!canAssign}
                 className="flex-1 min-w-0 bg-surface-subtle rounded-lg px-space-sm py-space-sm text-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:opacity-60 disabled:cursor-default"
               >
                 {people.map((p) => (
@@ -323,7 +323,7 @@ function TaskForm({
             onChange={(next) => set("assigneeIds", next)}
             size="md"
             align="left"
-            disabled={!canEditCore}
+            disabled={!canAssign}
           />
         </div>
 

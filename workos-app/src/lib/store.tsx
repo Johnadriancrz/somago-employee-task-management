@@ -113,8 +113,13 @@ interface BoardContextValue {
    * `updateTask` uses.
    */
   updatePerson: (personId: string, patch: Partial<Person>) => void;
-  /** Wipes any edits and restores the original seed data for every workspace, board, and task. */
-  resetAllData: () => void;
+  /**
+   * Wipes the real backend state (Workspaces/Boards/Tasks/People) via
+   * `POST /api/reset` and applies its response to local state. Throws if
+   * the backend call fails — callers must catch and surface the error
+   * rather than assume success.
+   */
+  resetAllData: () => Promise<void>;
 }
 
 const BoardContext = createContext<BoardContextValue | null>(null);
@@ -606,11 +611,20 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
   const openNewWorkspaceDialog = useCallback(() => setShowNewWorkspaceDialog(true), []);
   const closeNewWorkspaceDialog = useCallback(() => setShowNewWorkspaceDialog(false), []);
 
-  const resetAllData = useCallback(() => {
-    setWorkspaces(WORKSPACES);
-    setAllBoards(BOARDS);
-    setAllTasksByBoard(TASKS_BY_BOARD);
-    setPeople(PEOPLE);
+  /**
+   * Resets the real, persisted backend state first (`ResetController`) and
+   * only applies its actual response to local state once that succeeds —
+   * never optimistically, since a false "reset" here would mean showing the
+   * user seed data that doesn't match what the backend actually holds. On
+   * failure, local state is left untouched and the error propagates to the
+   * caller (the Settings page) instead of being swallowed.
+   */
+  const resetAllData = useCallback(async () => {
+    const result = await resetAllDataRequest();
+    setWorkspaces(result.workspaces);
+    setAllBoards(result.boards);
+    setAllTasksByBoard(result.tasksByBoard);
+    setPeople(result.people);
     setActiveWorkspaceIdState(DEFAULT_WORKSPACE_ID);
     setActiveBoardIdState("q3-overview");
     setActiveView("table");
@@ -620,7 +634,6 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     setSortBy("none");
     setGroupBy("timeline");
     setActivePanel(null);
-    resetAllDataRequest().catch((err) => console.error("Failed to reset server data", err));
   }, []);
 
   const value = useMemo(

@@ -24,6 +24,11 @@ function formatTimestamp(iso: string): string {
 // so this always starts empty for the right conversation — no manual reset needed.
 function useConversationMessages(conversationId: ConversationId) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Distinguishes "genuinely no messages yet" from "failed to load" — both
+  // start as an empty `messages` array, so the load failure needs its own
+  // flag or it renders identically to a real empty conversation.
+  const [loadError, setLoadError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +36,10 @@ function useConversationMessages(conversationId: ConversationId) {
       .then((data) => {
         if (!cancelled) setMessages(data);
       })
-      .catch((err) => console.error("Failed to load messages", err));
+      .catch((err) => {
+        console.error("Failed to load messages", err);
+        if (!cancelled) setLoadError(true);
+      });
 
     const closeStream = openMessageStream(conversationId, (message) => {
       setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
@@ -41,9 +49,14 @@ function useConversationMessages(conversationId: ConversationId) {
       cancelled = true;
       closeStream();
     };
-  }, [conversationId]);
+  }, [conversationId, retryCount]);
 
-  return messages;
+  const retry = () => {
+    setLoadError(false);
+    setRetryCount((n) => n + 1);
+  };
+
+  return { messages, loadError, retry };
 }
 
 export default function ChatPage() {
@@ -183,8 +196,9 @@ function ConversationThread({
   currentUserId: string;
   people: { id: string; name: string }[];
 }) {
-  const messages = useConversationMessages(conversationId);
+  const { messages, loadError, retry } = useConversationMessages(conversationId);
   const [draft, setDraft] = useState("");
+  const [sendError, setSendError] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -195,8 +209,13 @@ function ConversationThread({
     const text = draft.trim();
     if (!text) return;
     setDraft("");
+    setSendError(false);
     sendMessageRequest(conversationId, text).catch((err) => {
       console.error("Failed to send message", err);
+      // Restore the drafted text instead of silently discarding it — the
+      // message never made it to the server, so it shouldn't just vanish.
+      setDraft((current) => current || text);
+      setSendError(true);
     });
   };
 
@@ -220,7 +239,15 @@ function ConversationThread({
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-space-lg py-space-md flex flex-col gap-space-sm">
-        {messages.length === 0 && (
+        {messages.length === 0 && loadError && (
+          <div className="flex flex-col items-center gap-space-xs py-space-lg">
+            <p className="text-body-sm text-secondary text-center">Couldn&apos;t load messages.</p>
+            <Button variant="primary" onClick={retry}>
+              Retry
+            </Button>
+          </div>
+        )}
+        {messages.length === 0 && !loadError && (
           <p className="text-body-sm text-secondary text-center py-space-lg">No messages yet — say hi!</p>
         )}
         {messages.map((message) => {
@@ -250,10 +277,18 @@ function ConversationThread({
       </div>
 
       <div className="p-space-md border-t border-border-subtle shrink-0">
+        {sendError && (
+          <p className="text-caption text-status-stuck mb-space-xs">
+            Message failed to send — check your connection and try again.
+          </p>
+        )}
         <div className="flex items-center gap-space-sm">
           <input
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              if (sendError) setSendError(false);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();

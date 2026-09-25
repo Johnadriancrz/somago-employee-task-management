@@ -23,7 +23,7 @@ export function AssigneesPicker({
   onChange: (next: string[]) => void;
   size?: "sm" | "md";
   align?: "left" | "right";
-  /** Only the task's owner may assign people — everyone else sees who's assigned but can't change it. */
+  /** Only CEO/Operation Manager, and only while they're also the task's current owner, may assign people (spec section 11) — everyone else sees who's assigned but can't change it. */
   disabled?: boolean;
 }) {
   const { people } = useBoard();

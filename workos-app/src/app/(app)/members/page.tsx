@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/lib/confirm";
 import { useAuth } from "@/lib/auth";
+import { canManageAllWorkspaces } from "@/lib/roles";
 import { useBoard } from "@/lib/store";
 import type { Person, Workspace } from "@/lib/types";
 
@@ -17,16 +18,20 @@ import type { Person, Workspace } from "@/lib/types";
  * Only the account that created a workspace ("head account") can manage who's
  * in it, so this page is scoped to workspaces the signed-in person owns —
  * one card per workspace, each with its own roster and add-person control.
+ * CEO is the one exception (spec section 12): every workspace is visible
+ * and manageable here, matching `WorkspaceService.addMember`/`removeMember`'s
+ * additive owner-bypass on the backend.
  */
 export default function MembersPage() {
   const { user } = useAuth();
   const { workspaces, people, personById, addWorkspaceMember, removeWorkspaceMember } = useBoard();
   const confirm = useConfirm();
   const [addDialogWorkspaceId, setAddDialogWorkspaceId] = useState<string | null>(null);
+  const manageAll = canManageAllWorkspaces(user?.accessRole);
 
   const ownedWorkspaces = useMemo(
-    () => workspaces.filter((w) => w.ownerId === user?.id),
-    [workspaces, user?.id],
+    () => (manageAll ? workspaces : workspaces.filter((w) => w.ownerId === user?.id)),
+    [workspaces, user?.id, manageAll],
   );
   const activeDialogWorkspace = ownedWorkspaces.find((w) => w.id === addDialogWorkspaceId) ?? null;
 
@@ -49,7 +54,9 @@ export default function MembersPage() {
             description={
               ownedWorkspaces.length === 0
                 ? "You haven't created a workspace yet."
-                : "Workspaces you created — add or remove the accounts that can see and work in them."
+                : manageAll
+                  ? "Every workspace (CEO access) — add or remove the accounts that can see and work in them."
+                  : "Workspaces you created — add or remove the accounts that can see and work in them."
             }
           />
 

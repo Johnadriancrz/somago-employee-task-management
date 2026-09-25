@@ -11,6 +11,8 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.workos.workos_backend.authorization.AccessRoleChecker;
+import com.workos.workos_backend.authorization.AccessRoles;
 import com.workos.workos_backend.dto.AttachmentInput;
 import com.workos.workos_backend.dto.CreateTaskRequest;
 import com.workos.workos_backend.dto.SubtaskInput;
@@ -48,6 +50,14 @@ import com.workos.workos_backend.repository.TaskRepository;
  * frontend never edits it — see the audit, Section 5.1) so it is treated as
  * a core field here, the conservative choice that doesn't weaken security.
  * {@code updatedAt} is unrestricted bookkeeping, not a permissioned field.
+ *
+ * <p>Work assignment (spec section 11) is additionally role-gated: setting
+ * {@code assigneeIds} at creation, or touching {@code ownerId}/{@code
+ * assigneeIds} on an update, requires the actor's accessRole to be CEO or
+ * Operation Manager — on top of, not instead of, the owner-only gate above.
+ * A task owner who is neither CEO nor Operation Manager can no longer
+ * reassign their own task; this is an intentional narrowing of the
+ * previous owner-only behavior, not a bug.
  */
 @Service
 public class TaskService {
@@ -59,12 +69,14 @@ public class TaskService {
     private final BoardMetaRepository boardMetaRepository;
     private final PersonRepository personRepository;
     private final BoardService boardService;
+    private final AccessRoleChecker accessRoleChecker;
 
     public TaskService(TaskRepository taskRepository, BoardMetaRepository boardMetaRepository,
-            PersonRepository personRepository, BoardService boardService) {
+            PersonRepository personRepository, BoardService boardService, AccessRoleChecker accessRoleChecker) {
         this.taskRepository = taskRepository;
         this.boardMetaRepository = boardMetaRepository;
         this.personRepository = personRepository;
+        this.accessRoleChecker = accessRoleChecker;
         this.boardService = boardService;
     }
 
@@ -83,6 +95,10 @@ public class TaskService {
         BoardMeta board = boardMetaRepository.findById(request.boardId())
                 .orElseThrow(() -> new ResourceNotFoundException("Unknown board id: " + request.boardId()));
         requireMember(board.getWorkspace(), actorId);
+
+        if (request.assigneeIds() != null && !request.assigneeIds().isEmpty() && !canAssignWork(actorId)) {
+            throw new ForbiddenException("Only CEO or Operation Manager can assign work to other employees");
+        }
 
         Person owner = personRepository.findById(actorId)
                 .orElseThrow(() -> new IllegalStateException("Acting person not found: " + actorId));
@@ -149,6 +165,11 @@ public class TaskService {
         if (!isOwner && !attemptedCoreFields.isEmpty()) {
             throw new ForbiddenException(
                     "Only the task owner can modify these fields: " + String.join(", ", attemptedCoreFields));
+        }
+
+        boolean touchesAssignment = patch.ownerId() != null || patch.assigneeIds() != null;
+        if (touchesAssignment && !canAssignWork(actorId)) {
+            throw new ForbiddenException("Only CEO or Operation Manager can assign or reassign work");
         }
 
         // Core fields (reachable only if isOwner, or none were attempted).
@@ -240,6 +261,11 @@ public class TaskService {
         if (!isMember) {
             throw new ForbiddenException("Not a member of this workspace");
         }
+    }
+
+    /** Spec section 11: only CEO and Operation Manager may assign or reassign work. */
+    private boolean canAssignWork(String actorId) {
+        return accessRoleChecker.actorHasAnyRole(actorId, AccessRoles.CEO, AccessRoles.OPERATION_MANAGER);
     }
 
     private Person resolvePerson(String personId) {

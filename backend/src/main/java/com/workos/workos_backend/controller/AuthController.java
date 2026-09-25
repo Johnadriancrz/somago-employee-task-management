@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.workos.workos_backend.dto.ChangePasswordRequest;
 import com.workos.workos_backend.dto.LoginRequest;
 import com.workos.workos_backend.dto.OkResponse;
 import com.workos.workos_backend.dto.PersonResponse;
@@ -57,6 +58,19 @@ public class AuthController {
     @GetMapping("/me")
     public PersonResponse me(@CookieValue(name = AuthService.COOKIE_NAME, required = false) String token) {
         return PersonResponse.from(authService.currentPerson(token));
+    }
+
+    /**
+     * The authenticated identity comes solely from the session cookie —
+     * {@code request} never carries a personId, so there is no way for a
+     * caller to change anyone else's password.
+     */
+    @PostMapping("/change-password")
+    public OkResponse changePassword(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        authService.changePassword(token, request.currentPassword(), request.newPassword());
+        return OkResponse.OK;
     }
 
     private ResponseCookie sessionCookie(String token) {

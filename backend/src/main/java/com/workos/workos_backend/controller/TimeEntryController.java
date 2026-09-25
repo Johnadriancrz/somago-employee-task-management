@@ -54,6 +54,7 @@ public class TimeEntryController {
 
     @GetMapping("/entries")
     public List<TimeEntryResponse> entries(@RequestParam(required = false) String personId) {
-        return timeEntryService.listEntries(personId).stream().map(TimeEntryResponse::from).toList();
+        String actorId = actingPersonResolver.currentPersonId();
+        return timeEntryService.listEntries(actorId, personId).stream().map(TimeEntryResponse::from).toList();
     }
 }

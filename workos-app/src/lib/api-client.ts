@@ -4,7 +4,6 @@ import type {
   ChatMessage,
   ConversationId,
   NewBoardInput,
-  NewPersonInputWithPassword,
   NewTaskInput,
   NewWorkspaceInput,
   Person,
@@ -41,7 +40,7 @@ let recoveringSession = false;
 function handleStaleSession() {
   if (recoveringSession || typeof window === "undefined") return;
   recoveringSession = true;
-  fetch("/api/auth/logout", { method: "POST" }).finally(() => {
+  fetch(`${SPRING_API_BASE_URL}/api/auth/logout`, { method: "POST", credentials: "include" }).finally(() => {
     // A hard navigation, not router.push — this module has no router access
     // (it's not a component), and a full reload is what we actually want
     // here: it guarantees AuthProvider/BoardProvider/ClockProvider remount
@@ -56,7 +55,7 @@ let recoveringAdminSession = false;
 function handleStaleAdminSession() {
   if (recoveringAdminSession || typeof window === "undefined") return;
   recoveringAdminSession = true;
-  fetch("/api/admin/auth/logout", { method: "POST" }).finally(() => {
+  fetch(`${SPRING_API_BASE_URL}/api/admin/auth/logout`, { method: "POST", credentials: "include" }).finally(() => {
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/admin/login";
   });
@@ -72,13 +71,20 @@ function handleStaleAdminSession() {
 async function request<T>(path: string, init?: RequestInit, baseUrl = ""): Promise<T> {
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
+    // Required for the browser to send/receive the Spring session cookie on
+    // springRequest's cross-origin (different-port) calls — see
+    // CorsConfig.allowCredentials(true) on the backend. A no-op for
+    // same-origin relative `request()` calls (Chat/Reset/legacy admin),
+    // which already send cookies by default.
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
-  if (res.status === 401 && !path.startsWith("/api/auth/") && !path.startsWith("/api/admin/")) {
-    handleStaleSession();
-  }
-  if (res.status === 401 && path.startsWith("/api/admin/") && !path.startsWith("/api/admin/auth/")) {
+  const isAdminGatedPath =
+    path === "/api/accounts" || (path.startsWith("/api/admin/") && !path.startsWith("/api/admin/auth/"));
+  if (res.status === 401 && isAdminGatedPath) {
     handleStaleAdminSession();
+  } else if (res.status === 401 && !path.startsWith("/api/auth/") && !path.startsWith("/api/admin/")) {
+    handleStaleSession();
   }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
@@ -177,30 +183,53 @@ export function fetchPeople(): Promise<Person[]> {
 
 // Combined reset
 
+/**
+ * Goes straight to the Spring Boot backend's `ResetController` (BACKEND.md's
+ * Reset table) — the Next.js `/api/reset` stub only ever reset its own
+ * in-memory data, never the real, persisted state. `local-dev`-profile only,
+ * like the rest of the Spring reset machinery.
+ */
 export function resetAllDataRequest(): Promise<{
   workspaces: Workspace[];
   boards: BoardMeta[];
   tasksByBoard: Record<BoardId, Task[]>;
+  people: Person[];
 }> {
-  return request("/api/reset", { method: "POST" });
+  return springRequest("/api/reset", { method: "POST" });
 }
 
 // Auth
 
+/**
+ * Backend-owned authentication (spec section 6) — goes straight to Spring,
+ * same as People/Workspaces/Boards/Tasks/Time-clock. The response includes
+ * the authenticated Person's persisted `accessRole`, never a client-
+ * supplied one. The Next.js `/api/auth/*` routes and their in-memory
+ * session store are no longer called from here; Chat's own identity
+ * resolution (`requireSessionPersonId`) now validates against this same
+ * Spring session instead (see `lib/server/require-session.ts`), so it
+ * keeps working unchanged.
+ */
 export function loginRequest(email: string, password: string): Promise<Person> {
-  return request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+  return springRequest("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 }
 
 export function logoutRequest(): Promise<void> {
-  return request("/api/auth/logout", { method: "POST" });
+  return springRequest("/api/auth/logout", { method: "POST" });
 }
 
 export function fetchMe(): Promise<Person> {
-  return request("/api/auth/me");
+  return springRequest("/api/auth/me");
 }
 
+/**
+ * Goes straight to the Spring Boot backend's `AuthController.changePassword`
+ * — the caller's identity comes from the Spring session cookie (`credentials:
+ * "include"`, same as every other `springRequest` call), never from a
+ * client-supplied id. Requires the caller's own current password.
+ */
 export function changePasswordRequest(currentPassword: string, newPassword: string): Promise<void> {
-  return request("/api/auth/change-password", {
+  return springRequest("/api/auth/change-password", {
     method: "POST",
     body: JSON.stringify({ currentPassword, newPassword }),
   });
@@ -256,34 +285,32 @@ export function fetchTimeEntries(personId?: string): Promise<TimeEntry[]> {
 }
 
 // Admin — a fully separate login/session from the workspace-user auth above.
+// Goes straight to the Spring Boot backend (AdminAuthController/AccountController),
+// same as the workspace-user auth functions above — see BACKEND.md's Auth section.
 
-export function adminLoginRequest(email: string, password: string): Promise<{ email: string }> {
-  return request("/api/admin/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+export function adminLoginRequest(email: string, password: string): Promise<{ id: string; email: string }> {
+  return springRequest("/api/admin/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 }
 
 export function adminLogoutRequest(): Promise<void> {
-  return request("/api/admin/auth/logout", { method: "POST" });
+  return springRequest("/api/admin/auth/logout", { method: "POST" });
 }
 
-export function fetchAdminMe(): Promise<{ email: string }> {
-  return request("/api/admin/auth/me");
+export function fetchAdminMe(): Promise<{ id: string; email: string }> {
+  return springRequest("/api/admin/auth/me");
 }
 
-export function fetchAdminPeople(): Promise<Person[]> {
-  return request("/api/admin/people");
+/** POST /api/accounts — Admin-only employee account creation. Body: { name, email, password, accessRole }. */
+export function createAccountRequest(input: {
+  name: string;
+  email: string;
+  password: string;
+  accessRole: string;
+}): Promise<Person> {
+  return springRequest("/api/accounts", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function createPersonRequest(input: NewPersonInputWithPassword): Promise<Person> {
-  return request("/api/admin/people", { method: "POST", body: JSON.stringify(input) });
-}
-
-export function updatePersonRequest(
-  personId: string,
-  patch: Partial<NewPersonInputWithPassword>,
-): Promise<Person> {
-  return request(`/api/admin/people/${personId}`, { method: "PATCH", body: JSON.stringify(patch) });
-}
-
-export function deletePersonRequest(personId: string): Promise<void> {
-  return request(`/api/admin/people/${personId}`, { method: "DELETE" });
+/** GET /api/accounts — Admin-only persisted employee-account roster. */
+export function fetchAccountsRequest(): Promise<Person[]> {
+  return springRequest("/api/accounts");
 }

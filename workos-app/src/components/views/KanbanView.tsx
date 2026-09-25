@@ -155,7 +155,7 @@ export function KanbanView() {
 function KanbanCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
   const subtaskDone = task.subtasks?.filter((s) => s.done).length ?? 0;
   const subtaskTotal = task.subtasks?.length ?? 0;
-  const { isOwner, canEditProgress } = useTaskPermissions(task);
+  const { canEditProgress, canAssign } = useTaskPermissions(task);
 
   return (
     <div
@@ -275,7 +275,7 @@ function KanbanCard({ task, onOpen }: { task: Task; onOpen: () => void }) {
         ) : (
           <span />
         )}
-        <OwnerPicker taskId={task.id} ownerId={task.ownerId} size="md" disabled={!isOwner} />
+        <OwnerPicker taskId={task.id} ownerId={task.ownerId} size="md" disabled={!canAssign} />
       </div>
       </motion.div>
     </div>

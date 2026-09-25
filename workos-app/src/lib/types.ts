@@ -40,6 +40,14 @@ export interface Person {
   role: string;
   /** Tailwind classes for the avatar chip background + text color. */
   chipClass: string;
+  /**
+   * One of the 8 fixed employee access roles (see `lib/roles.ts`), or
+   * null/undefined until a CEO/Admin explicitly assigns one (spec section
+   * 13.3) — a person with no accessRole gets no elevated permissions
+   * anywhere. Optional so existing object literals (demo seed data, the
+   * legacy admin console) that don't know about this field still typecheck.
+   */
+  accessRole?: string | null;
 }
 
 export type NewPersonInput = Omit<Person, "id">;

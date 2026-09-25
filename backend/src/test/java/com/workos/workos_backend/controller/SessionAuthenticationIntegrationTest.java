@@ -69,6 +69,23 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    void timeEntriesEndpointRejectsARequestWithNoSessionCookieWith401() {
+        MvcTestResult result = mvc.get().uri("/api/time/entries").exchange();
+
+        assertThat(result).hasStatus(401);
+    }
+
+    @Test
+    void taskPatchEndpointRejectsARequestWithNoSessionCookieWith401() {
+        MvcTestResult result = mvc.patch().uri("/api/tasks/does-not-matter")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\": \"X\"}")
+                .exchange();
+
+        assertThat(result).hasStatus(401);
+    }
+
+    @Test
     void workspacesEndpointSucceedsForARealLoggedInSession() {
         createLoginCapablePerson("quinn-doe", "quinn.doe@workos.dev", "correct-horse");
         String token = login("quinn.doe@workos.dev", "correct-horse");

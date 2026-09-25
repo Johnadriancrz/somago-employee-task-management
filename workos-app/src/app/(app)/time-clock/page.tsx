@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth";
 import { useClock, useElapsedLabel } from "@/lib/clock";
 import { fetchTimeEntries } from "@/lib/api-client";
 import { canViewAllTimeEntries } from "@/lib/roles";
+import { useRedirectIfUnauthenticated } from "@/lib/use-redirect-if-unauthenticated";
 import type { TimeEntry } from "@/lib/types";
 
 type RangeId = "day" | "thisWeek" | "week" | "month" | "all";
@@ -55,7 +56,7 @@ function formatHours(hours: number): string {
 
 export default function TimeClockPage() {
   const { people } = useBoard();
-  const { user } = useAuth();
+  const { user, status } = useAuth();
   const { entry, loading, clockIn, clockOut } = useClock();
   const elapsed = useElapsedLabel(entry?.clockIn ?? null);
   const [entries, setEntries] = useState<TimeEntry[]>([]);
@@ -65,7 +66,14 @@ export default function TimeClockPage() {
   const [asOf, setAsOf] = useState(0);
   const [range, setRange] = useState<RangeId>("week");
 
-  const canViewAll = canViewAllTimeEntries(user?.role);
+  useRedirectIfUnauthenticated();
+
+  // Server-enforced (TimeEntryService.listEntries ignores personIdFilter for
+  // anyone but CEO/HR) — this only decides what the UI *offers*, never what
+  // data is actually returned. `user?.accessRole` is undefined while
+  // loading/unauthenticated, which correctly defaults to the most
+  // restrictive ("own only") view rather than flashing the all-employee one.
+  const canViewAll = canViewAllTimeEntries(user?.accessRole);
 
   const loadEntries = useCallback(() => {
     fetchTimeEntries()
@@ -113,6 +121,26 @@ export default function TimeClockPage() {
   const totalDays = new Set(scopedEntries.map((e) => new Date(e.clockIn).toDateString())).size;
   const clockedInCount = perPerson.filter((p) => p.clockedIn).length;
 
+  if (status === "loading") {
+    return (
+      <AppShell>
+        <main className="w-full pt-14 h-screen flex items-center justify-center">
+          <span className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin text-secondary" />
+        </main>
+      </AppShell>
+    );
+  }
+
+  if (status === "unauthenticated" || !user) {
+    return (
+      <AppShell>
+        <main className="w-full pt-14 h-screen flex items-center justify-center">
+          <p className="text-body-sm text-secondary">Your session has expired — signing you out…</p>
+        </main>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <main className="w-full pt-14 min-h-screen">
@@ -121,7 +149,7 @@ export default function TimeClockPage() {
             title="Time Clock"
             description={
               canViewAll
-                ? "Clock in/out and workspace hours for HR, Finance, CEO, and Operations Manager."
+                ? "Clock in/out and every employee's logged hours (CEO and HR access)."
                 : "Clock in/out and your logged hours."
             }
           />

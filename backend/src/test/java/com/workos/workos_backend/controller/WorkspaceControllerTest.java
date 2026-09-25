@@ -12,7 +12,9 @@ import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.Workspace;
+import com.workos.workos_backend.repository.PersonRepository;
 import com.workos.workos_backend.service.WorkspaceService;
 
 /**
@@ -34,6 +36,15 @@ class WorkspaceControllerTest {
 
     @Autowired
     private WorkspaceService workspaceService;
+
+    @Autowired
+    private PersonRepository personRepository;
+
+    private void grantSarahChenAccessRole(String accessRole) {
+        Person sarahChen = personRepository.findById("sarah-chen").orElseThrow();
+        sarahChen.setAccessRole(accessRole);
+        personRepository.save(sarahChen);
+    }
 
     @Test
     void createReturns201WithDocumentedShapeAndAutoInitials() {
@@ -181,5 +192,34 @@ class WorkspaceControllerTest {
 
         assertThat(result).hasStatusOk();
         assertThat(result).bodyJson().extractingPath("$.memberIds").asArray().containsExactly("sarah-chen");
+    }
+
+    @Test
+    void addMemberSucceedsForCeoEvenWithoutOwnershipOrMembership() {
+        Workspace workspace = workspaceService.createWorkspace("alex-morgan", "Team", "TM");
+        grantSarahChenAccessRole("CEO");
+
+        MvcTestResult result = mvc.post().uri("/api/workspaces/{id}/members", workspace.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"personId\": \"priya-patel\"}")
+                .exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result).bodyJson().extractingPath("$.memberIds").asArray()
+                .containsExactlyInAnyOrder("alex-morgan", "priya-patel");
+    }
+
+    @Test
+    void removeMemberSucceedsForCeoEvenWithoutOwnershipOrMembership() {
+        Workspace workspace = workspaceService.createWorkspace("alex-morgan", "Team", "TM");
+        workspaceService.addMember("alex-morgan", workspace.getId(), "priya-patel");
+        grantSarahChenAccessRole("CEO");
+
+        MvcTestResult result = mvc.delete()
+                .uri("/api/workspaces/{workspaceId}/members/{personId}", workspace.getId(), "priya-patel")
+                .exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result).bodyJson().extractingPath("$.memberIds").asArray().containsExactly("alex-morgan");
     }
 }

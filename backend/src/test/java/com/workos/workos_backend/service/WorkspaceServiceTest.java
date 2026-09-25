@@ -40,7 +40,15 @@ class WorkspaceServiceTest {
     private WorkspaceRepository workspaceRepository;
 
     @Autowired
+    private AccountService accountService;
+
+    @Autowired
     private EntityManager entityManager;
+
+    private String newCeo() {
+        return accountService.createAccount(
+                "CEO", "ceo-" + UUID.randomUUID() + "@workos.dev", "Password123!", "CEO").getId();
+    }
 
     @Test
     void createWorkspaceMakesCreatorOwnerAndSoleMember() {
@@ -125,6 +133,44 @@ class WorkspaceServiceTest {
 
         Workspace updated = workspaceService.removeMember("sarah-chen", workspace.getId(), "alex-morgan");
         assertThat(updated.getMembers()).extracting(Person::getId).containsExactly("sarah-chen");
+    }
+
+    @Test
+    void ceoCanAddMemberToAWorkspaceTheyDoNotOwnOrBelongTo() {
+        Workspace workspace = workspaceService.createWorkspace("sarah-chen", "Product Eng", "PE");
+        String ceoId = newCeo();
+
+        // The CEO is neither the owner nor a member of this workspace at all
+        // (spec section 12: CEO manages membership across all workspaces).
+        Workspace updated = workspaceService.addMember(ceoId, workspace.getId(), "alex-morgan");
+
+        assertThat(updated.getMembers()).extracting(Person::getId)
+                .containsExactlyInAnyOrder("sarah-chen", "alex-morgan");
+    }
+
+    @Test
+    void ceoCanRemoveMemberFromAWorkspaceTheyDoNotOwnOrBelongTo() {
+        Workspace workspace = workspaceService.createWorkspace("sarah-chen", "Product Eng", "PE");
+        workspaceService.addMember("sarah-chen", workspace.getId(), "alex-morgan");
+        String ceoId = newCeo();
+
+        Workspace updated = workspaceService.removeMember(ceoId, workspace.getId(), "alex-morgan");
+
+        assertThat(updated.getMembers()).extracting(Person::getId).containsExactly("sarah-chen");
+    }
+
+    @Test
+    void operationManagerWhoIsNotTheOwnerCannotAddOrRemoveMembers() {
+        Workspace workspace = workspaceService.createWorkspace("sarah-chen", "Product Eng", "PE");
+        String omId = accountService.createAccount(
+                "OM", "om-" + UUID.randomUUID() + "@workos.dev", "Password123!", "Operation Manager").getId();
+
+        // Spec section 12/20 item 5: Operation Manager's broader "workspaces
+        // they are authorized to manage" scope beyond ones they own has no
+        // schema representation yet and is intentionally not guessed at —
+        // only CEO gets the additive bypass in this phase.
+        assertThatThrownBy(() -> workspaceService.addMember(omId, workspace.getId(), "alex-morgan"))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

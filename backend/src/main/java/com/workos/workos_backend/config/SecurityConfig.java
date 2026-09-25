@@ -7,6 +7,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 /**
  * Spring Security is added in this phase for its password-hashing support
@@ -22,6 +23,13 @@ import org.springframework.security.web.SecurityFilterChain;
  * GET /api/auth/me}. Leaving this filter chain at "permit all" is what
  * keeps every already-working endpoint from suddenly requiring Spring
  * Security's own default login here.
+ *
+ * <p>{@code .cors(...)} wires in the {@link CorsConfigurationSource} bean
+ * from {@link CorsConfig}, which registers a real {@code CorsFilter} at the
+ * front of this chain. That guarantees {@code Access-Control-Allow-Origin}
+ * is present on every response this chain produces — success, 401/403 from
+ * a controller, or an unexpected 500 — not just ones where a controller
+ * method was cleanly resolved and invoked.
  *
  * <p>CSRF protection is disabled: this is a JSON API with no
  * server-rendered forms, and the session cookie's {@code SameSite=Lax}
@@ -43,8 +51,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource)
+            throws Exception {
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());

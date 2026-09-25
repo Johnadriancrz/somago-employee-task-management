@@ -5,7 +5,7 @@ import { adminLoginRequest, adminLogoutRequest, fetchAdminMe } from "./api-clien
 
 interface AdminAuthContextValue {
   /** null while status is "loading" or "unauthenticated". */
-  admin: { email: string } | null;
+  admin: { id: string; email: string } | null;
   status: "loading" | "authenticated" | "unauthenticated";
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -19,7 +19,7 @@ const AdminAuthContext = createContext<AdminAuthContextValue | null>(null);
  * admin session and a workspace-user session are unrelated identities.
  */
 export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
-  const [admin, setAdmin] = useState<{ email: string } | null>(null);
+  const [admin, setAdmin] = useState<{ id: string; email: string } | null>(null);
   const [status, setStatus] = useState<AdminAuthContextValue["status"]>("loading");
 
   useEffect(() => {

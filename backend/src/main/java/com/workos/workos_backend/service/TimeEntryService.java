@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.workos.workos_backend.authorization.AccessRoleChecker;
+import com.workos.workos_backend.authorization.AccessRoles;
 import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.TimeEntry;
 import com.workos.workos_backend.exception.ConflictException;
@@ -21,20 +23,25 @@ import com.workos.workos_backend.repository.TimeEntryRepository;
  * BACKEND.md: "The signed-in user is always taken from the session for
  * clock-in/out — never from the request body."
  *
- * <p>{@code GET /api/time/entries} is intentionally open to any actor for
- * any person's entries — this app has no role/permission system yet (see
- * BACKEND.md's Time clock note), so it is not gated beyond being a valid
- * actor.
+ * <p>{@code GET /api/time/entries} is role-scoped (spec section 9): CEO and
+ * HR may see any person's entries (or all entries with no filter); every
+ * other actor — including one with no {@code accessRole} yet — always sees
+ * only their own, regardless of what {@code personIdFilter} the caller asks
+ * for. This prevents an IDOR-style bypass by manipulating the
+ * {@code personId} query parameter directly.
  */
 @Service
 public class TimeEntryService {
 
     private final TimeEntryRepository timeEntryRepository;
     private final PersonRepository personRepository;
+    private final AccessRoleChecker accessRoleChecker;
 
-    public TimeEntryService(TimeEntryRepository timeEntryRepository, PersonRepository personRepository) {
+    public TimeEntryService(TimeEntryRepository timeEntryRepository, PersonRepository personRepository,
+            AccessRoleChecker accessRoleChecker) {
         this.timeEntryRepository = timeEntryRepository;
         this.personRepository = personRepository;
+        this.accessRoleChecker = accessRoleChecker;
     }
 
     @Transactional
@@ -63,9 +70,16 @@ public class TimeEntryService {
         return timeEntryRepository.findByPersonIdAndClockOutIsNull(actorId);
     }
 
-    /** @param personIdFilter when non-blank, scopes to that one person's entries instead of every entry. */
+    /**
+     * @param actorId the server-resolved caller, whose accessRole decides whether personIdFilter is honored.
+     * @param personIdFilter when non-blank and the actor is CEO/HR, scopes to that one person's entries;
+     *                       ignored for every other actor, who is always scoped to their own id instead.
+     */
     @Transactional(readOnly = true)
-    public List<TimeEntry> listEntries(String personIdFilter) {
+    public List<TimeEntry> listEntries(String actorId, String personIdFilter) {
+        if (!accessRoleChecker.actorHasAnyRole(actorId, AccessRoles.CEO, AccessRoles.HR)) {
+            return timeEntryRepository.findByPersonIdOrderByClockInAsc(actorId);
+        }
         if (personIdFilter != null && !personIdFilter.isBlank()) {
             return timeEntryRepository.findByPersonIdOrderByClockInAsc(personIdFilter);
         }

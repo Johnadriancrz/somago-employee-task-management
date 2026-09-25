@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import com.workos.workos_backend.dto.CreateTaskRequest;
 import com.workos.workos_backend.dto.SubtaskInput;
 import com.workos.workos_backend.dto.UpdateTaskRequest;
 import com.workos.workos_backend.entity.BoardMeta;
+import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.Task;
 import com.workos.workos_backend.entity.TaskStatus;
 import com.workos.workos_backend.entity.Workspace;
@@ -49,6 +51,9 @@ class TaskServiceTest {
     private TaskRepository taskRepository;
 
     @Autowired
+    private AccountService accountService;
+
+    @Autowired
     private EntityManager entityManager;
 
     private BoardMeta newBoard(String ownerId, String... extraMemberIds) {
@@ -57,6 +62,18 @@ class TaskServiceTest {
             workspaceService.addMember(ownerId, workspace.getId(), memberId);
         }
         return boardService.createBoard(ownerId, workspace.getId(), "Board", "", "table");
+    }
+
+    /**
+     * Mints a fresh Operation Manager and adds them to the board's workspace,
+     * so they can perform work-assignment actions (spec section 11) the
+     * board's owner/assignee alone no longer can post-Phase-4.
+     */
+    private String newOperationManagerMember(BoardMeta board, String workspaceOwnerId) {
+        String omId = accountService.createAccount(
+                "OM", "om-" + UUID.randomUUID() + "@workos.dev", "Password123!", "Operation Manager").getId();
+        workspaceService.addMember(workspaceOwnerId, board.getWorkspace().getId(), omId);
+        return omId;
     }
 
     private CreateTaskRequest createRequest(String boardId) {
@@ -93,12 +110,46 @@ class TaskServiceTest {
     @Test
     void createTaskRejectsUnknownAssignee() {
         BoardMeta board = newBoard("sarah-chen");
+        String omId = newOperationManagerMember(board, "sarah-chen");
         CreateTaskRequest request = new CreateTaskRequest(
                 board.getId(), "Task", "this-week", "not-started", null, List.of("does-not-exist"),
                 null, 3, "Sep 19", "2025-09-01", "2025-09-19", 0, null, null, null, null, null);
 
-        assertThatThrownBy(() -> taskService.createTask("sarah-chen", request))
+        assertThatThrownBy(() -> taskService.createTask(omId, request))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void createTaskWithAssigneeIdsRejectsNonPrivilegedActorWith403() {
+        BoardMeta board = newBoard("sarah-chen");
+        CreateTaskRequest request = new CreateTaskRequest(
+                board.getId(), "Task", "this-week", "not-started", null, List.of("sarah-chen"),
+                null, 3, "Sep 19", "2025-09-01", "2025-09-19", 0, null, null, null, null, null);
+
+        assertThatThrownBy(() -> taskService.createTask("sarah-chen", request))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void createTaskWithAssigneeIdsSucceedsForOperationManagerMember() {
+        BoardMeta board = newBoard("sarah-chen");
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        CreateTaskRequest request = new CreateTaskRequest(
+                board.getId(), "Task", "this-week", "not-started", null, List.of("sarah-chen"),
+                null, 3, "Sep 19", "2025-09-01", "2025-09-19", 0, null, null, null, null, null);
+
+        Task task = taskService.createTask(omId, request);
+
+        assertThat(task.getAssignees()).extracting(Person::getId).containsExactly("sarah-chen");
+    }
+
+    @Test
+    void createTaskWithNoAssigneeIdsIsUnrestrictedByWorkAssignmentRole() {
+        BoardMeta board = newBoard("sarah-chen");
+
+        Task task = taskService.createTask("sarah-chen", createRequest(board.getId()));
+
+        assertThat(task.getAssignees()).isEmpty();
     }
 
     @Test
@@ -164,8 +215,9 @@ class TaskServiceTest {
     @Test
     void assigneeCanAddAttachmentViaUpdateButNonMemberCannot() {
         BoardMeta board = newBoard("sarah-chen", "alex-morgan");
-        Task task = taskService.createTask("sarah-chen", createRequest(board.getId()));
-        taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, null, List.of("alex-morgan"), null, null, null, null, null, null, null,
                 null, null, null, null, null));
         AttachmentInput attachment = new AttachmentInput(
@@ -261,8 +313,9 @@ class TaskServiceTest {
     @Test
     void assigneeCanEditProgressFieldsButNotCoreFields() {
         BoardMeta board = newBoard("sarah-chen", "alex-morgan");
-        Task task = taskService.createTask("sarah-chen", createRequest(board.getId()));
-        taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, null, List.of("alex-morgan"), null, null, null, null, null, null, null, null, null, null, null, null));
 
         Task updated = taskService.updateTask("alex-morgan", task.getId(), new UpdateTaskRequest(
@@ -308,11 +361,39 @@ class TaskServiceTest {
     }
 
     @Test
-    void ownerCanReassignOwnershipToAnExistingPerson() {
+    void ownerCannotReassignOwnershipWithoutCeoOrOperationManagerRole() {
         BoardMeta board = newBoard("sarah-chen");
         Task task = taskService.createTask("sarah-chen", createRequest(board.getId()));
 
-        Task updated = taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+        // Spec section 11's intentional narrowing: a task owner who is
+        // neither CEO nor Operation Manager can no longer reassign their own
+        // task, even though they still pass the pre-existing owner-only gate.
+        assertThatThrownBy(() -> taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+                null, null, null, "alex-morgan", null, null, null, null, null, null, null, null, null, null, null, null, null)))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void ceoOwnerCanReassignTaskOwnership() {
+        BoardMeta board = newBoard("sarah-chen");
+        String ceoId = accountService.createAccount(
+                "CEO", "ceo-" + UUID.randomUUID() + "@workos.dev", "Password123!", "CEO").getId();
+        workspaceService.addMember("sarah-chen", board.getWorkspace().getId(), ceoId);
+        Task task = taskService.createTask(ceoId, createRequest(board.getId()));
+
+        Task updated = taskService.updateTask(ceoId, task.getId(), new UpdateTaskRequest(
+                null, null, null, "alex-morgan", null, null, null, null, null, null, null, null, null, null, null, null, null));
+
+        assertThat(updated.getOwner().getId()).isEqualTo("alex-morgan");
+    }
+
+    @Test
+    void operationManagerOwnerCanReassignTaskOwnership() {
+        BoardMeta board = newBoard("sarah-chen");
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
+
+        Task updated = taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, "alex-morgan", null, null, null, null, null, null, null, null, null, null, null, null, null));
 
         assertThat(updated.getOwner().getId()).isEqualTo("alex-morgan");
@@ -321,13 +402,14 @@ class TaskServiceTest {
     @Test
     void updateRejectsUnknownOwnerOrAssignee() {
         BoardMeta board = newBoard("sarah-chen");
-        Task task = taskService.createTask("sarah-chen", createRequest(board.getId()));
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
 
-        assertThatThrownBy(() -> taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+        assertThatThrownBy(() -> taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, "does-not-exist", null, null, null, null, null, null, null, null, null, null, null, null, null)))
                 .isInstanceOf(ResourceNotFoundException.class);
 
-        assertThatThrownBy(() -> taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+        assertThatThrownBy(() -> taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, null, List.of("does-not-exist"), null, null, null, null, null, null, null, null, null, null, null, null)))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
@@ -342,11 +424,12 @@ class TaskServiceTest {
     @Test
     void subtaskDoneToggleIsProgressTierButStructuralChangeIsCoreTier() {
         BoardMeta board = newBoard("sarah-chen", "alex-morgan");
+        String omId = newOperationManagerMember(board, "sarah-chen");
         CreateTaskRequest request = new CreateTaskRequest(
                 board.getId(), "Task", "this-week", "not-started", null, List.of("alex-morgan"),
                 null, 3, "Sep 19", "2025-09-01", "2025-09-19", 0,
                 List.of(new SubtaskInput("sub-1", "Write tests", false)), null, null, null, null);
-        Task task = taskService.createTask("sarah-chen", request);
+        Task task = taskService.createTask(omId, request);
 
         // Assignee toggling "done" on the same subtask (same id/title/order) is allowed.
         Task afterToggle = taskService.updateTask("alex-morgan", task.getId(), new UpdateTaskRequest(
@@ -362,7 +445,7 @@ class TaskServiceTest {
                 .isInstanceOf(ForbiddenException.class);
 
         // Owner adding a new subtask is allowed.
-        Task afterAdd = taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+        Task afterAdd = taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, null, null, null, null, null, null, null, null,
                 List.of(new SubtaskInput("sub-1", "Write tests", true), new SubtaskInput("sub-2", "New", false)),
                 null, null, null, null, null));
@@ -386,14 +469,15 @@ class TaskServiceTest {
     @Test
     void deleteRequiresOwnerNotJustAssignee() {
         BoardMeta board = newBoard("sarah-chen", "alex-morgan");
-        Task task = taskService.createTask("sarah-chen", createRequest(board.getId()));
-        taskService.updateTask("sarah-chen", task.getId(), new UpdateTaskRequest(
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
                 null, null, null, null, List.of("alex-morgan"), null, null, null, null, null, null, null, null, null, null, null, null));
 
         assertThatThrownBy(() -> taskService.deleteTask("alex-morgan", task.getId()))
                 .isInstanceOf(ForbiddenException.class);
 
-        taskService.deleteTask("sarah-chen", task.getId());
+        taskService.deleteTask(omId, task.getId());
         assertThat(taskRepository.findById(task.getId())).isEmpty();
     }
 

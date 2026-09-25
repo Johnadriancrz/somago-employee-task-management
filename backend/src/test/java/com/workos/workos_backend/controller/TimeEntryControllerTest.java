@@ -11,6 +11,8 @@ import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.workos.workos_backend.entity.Person;
+import com.workos.workos_backend.repository.PersonRepository;
 import com.workos.workos_backend.service.TimeEntryService;
 
 /**
@@ -18,7 +20,10 @@ import com.workos.workos_backend.service.TimeEntryService;
  * the exact JSON contract from BACKEND.md. Runs as the fixed local-dev actor
  * (sarah-chen); a second person's entries are set up directly through the
  * service (same approach as TaskControllerTest) since the local-dev actor is
- * fixed for the whole Spring context.
+ * fixed for the whole Spring context. Role-scoped {@code /entries} scenarios
+ * (spec section 9) mutate sarah-chen's own accessRole directly via
+ * PersonRepository, since the fixed local-dev actor can't otherwise be
+ * swapped for a differently-privileged one mid-test.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -31,6 +36,15 @@ class TimeEntryControllerTest {
 
     @Autowired
     private TimeEntryService timeEntryService;
+
+    @Autowired
+    private PersonRepository personRepository;
+
+    private void grantSarahChenAccessRole(String accessRole) {
+        Person sarahChen = personRepository.findById("sarah-chen").orElseThrow();
+        sarahChen.setAccessRole(accessRole);
+        personRepository.save(sarahChen);
+    }
 
     @Test
     void statusReturnsNullWhenNotClockedIn() throws Exception {
@@ -89,7 +103,8 @@ class TimeEntryControllerTest {
     }
 
     @Test
-    void entriesWithNoFilterReturnsEveryPersonsEntries() {
+    void entriesForCeoWithNoFilterReturnsEveryPersonsEntries() {
+        grantSarahChenAccessRole("CEO");
         timeEntryService.clockIn("alex-morgan");
         mvc.post().uri("/api/time/clock-in").exchange();
 
@@ -100,11 +115,36 @@ class TimeEntryControllerTest {
     }
 
     @Test
-    void entriesWithPersonIdFilterScopesToThatPerson() {
+    void entriesForCeoWithPersonIdFilterScopesToThatPerson() {
+        grantSarahChenAccessRole("CEO");
         timeEntryService.clockIn("alex-morgan");
         mvc.post().uri("/api/time/clock-in").exchange();
 
         MvcTestResult result = mvc.get().uri("/api/time/entries?personId=sarah-chen").exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result).bodyJson().extractingPath("$").asArray().hasSize(1);
+        assertThat(result).bodyJson().extractingPath("$[0].personId").isEqualTo("sarah-chen");
+    }
+
+    @Test
+    void entriesForNonPrivilegedActorOnlyReturnsOwnEntriesEvenWithNoFilter() {
+        timeEntryService.clockIn("alex-morgan");
+        mvc.post().uri("/api/time/clock-in").exchange();
+
+        MvcTestResult result = mvc.get().uri("/api/time/entries").exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result).bodyJson().extractingPath("$").asArray().hasSize(1);
+        assertThat(result).bodyJson().extractingPath("$[0].personId").isEqualTo("sarah-chen");
+    }
+
+    @Test
+    void entriesForNonPrivilegedActorIgnoresPersonIdFilterForSomeoneElse() {
+        timeEntryService.clockIn("alex-morgan");
+        mvc.post().uri("/api/time/clock-in").exchange();
+
+        MvcTestResult result = mvc.get().uri("/api/time/entries?personId=alex-morgan").exchange();
 
         assertThat(result).hasStatusOk();
         assertThat(result).bodyJson().extractingPath("$").asArray().hasSize(1);

@@ -64,7 +64,7 @@ public class AuthService {
 
         Instant now = Instant.now();
         Session session = new Session(generateToken(), person.getId(), now, now.plus(SESSION_DURATION));
-        sessionRepository.save(session);
+        sessionRepository.saveAndFlush(session);
         return new IssuedSession(session, person);
     }
 
@@ -91,11 +91,38 @@ public class AuthService {
         Session session = sessionRepository.findById(token)
                 .orElseThrow(() -> new UnauthorizedException("Not authenticated"));
         if (session.isExpired(Instant.now())) {
+            // Flush first: deleteById() no-ops on a Persistable whose isNew()
+            // flag hasn't yet flipped to false, which only happens once the
+            // entity's insert has actually been flushed (see AssignedIdEntity).
+            sessionRepository.flush();
             sessionRepository.deleteById(token);
             throw new UnauthorizedException("Session expired");
         }
         return personRepository.findById(session.getPersonId())
                 .orElseThrow(() -> new UnauthorizedException("Not authenticated"));
+    }
+
+    /**
+     * Changes the password of the person identified by {@code token} (never
+     * a client-supplied personId). Requires the correct current password —
+     * verified the same way {@link #login} verifies it, including rejecting
+     * an account with no password hash yet — then re-hashes and persists
+     * the new one with the same {@link PasswordEncoder} used everywhere
+     * else. Every other session belonging to this person is revoked so a
+     * stolen/shared session can't outlive the password that granted it;
+     * the session tied to {@code token} itself is left alone since it just
+     * proved possession of the current password.
+     */
+    @Transactional
+    public void changePassword(String token, String currentPassword, String newPassword) {
+        Person person = currentPerson(token);
+        if (person.getPasswordHash() == null || !passwordEncoder.matches(currentPassword, person.getPasswordHash())) {
+            throw new UnauthorizedException("Current password is incorrect");
+        }
+
+        person.setPasswordHash(passwordEncoder.encode(newPassword));
+        personRepository.saveAndFlush(person);
+        sessionRepository.deleteByPersonIdAndTokenNot(person.getId(), token);
     }
 
     private static String generateToken() {

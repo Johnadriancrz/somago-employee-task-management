@@ -159,4 +159,51 @@ class AuthServiceTest {
         authService.logout(issued.session().getToken());
         authService.logout(issued.session().getToken());
     }
+
+    @Test
+    void changePasswordSucceedsWithTheCorrectCurrentPasswordAndAllowsLoginWithTheNewOne() {
+        givePersonACredential("sarah-chen", "correct-horse");
+        AuthService.IssuedSession issued = authService.login("sarah.chen@workos.dev", "correct-horse");
+
+        authService.changePassword(issued.session().getToken(), "correct-horse", "new-password-123");
+
+        assertThatThrownBy(() -> authService.login("sarah.chen@workos.dev", "correct-horse"))
+                .isInstanceOf(UnauthorizedException.class);
+        AuthService.IssuedSession relogin = authService.login("sarah.chen@workos.dev", "new-password-123");
+        assertThat(relogin.person().getId()).isEqualTo("sarah-chen");
+    }
+
+    @Test
+    void changePasswordRejectsAnIncorrectCurrentPassword() {
+        givePersonACredential("sarah-chen", "correct-horse");
+        AuthService.IssuedSession issued = authService.login("sarah.chen@workos.dev", "correct-horse");
+
+        assertThatThrownBy(() -> authService.changePassword(issued.session().getToken(), "wrong", "new-password-123"))
+                .isInstanceOf(UnauthorizedException.class);
+        // Original password still works — the failed attempt made no change.
+        authService.login("sarah.chen@workos.dev", "correct-horse");
+    }
+
+    @Test
+    void changePasswordRejectsAnUnauthenticatedCaller() {
+        assertThatThrownBy(() -> authService.changePassword(null, "whatever", "new-password-123"))
+                .isInstanceOf(UnauthorizedException.class);
+        assertThatThrownBy(() -> authService.changePassword("not-a-real-token", "whatever", "new-password-123"))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void changePasswordRevokesTheCallersOtherSessionsButKeepsTheCurrentOneAlive() {
+        givePersonACredential("sarah-chen", "correct-horse");
+        AuthService.IssuedSession sessionA = authService.login("sarah.chen@workos.dev", "correct-horse");
+        AuthService.IssuedSession sessionB = authService.login("sarah.chen@workos.dev", "correct-horse");
+
+        authService.changePassword(sessionA.session().getToken(), "correct-horse", "new-password-123");
+
+        // The session used to make the change survives.
+        assertThat(authService.currentPerson(sessionA.session().getToken()).getId()).isEqualTo("sarah-chen");
+        // Every other session for this person is revoked.
+        assertThatThrownBy(() -> authService.currentPerson(sessionB.session().getToken()))
+                .isInstanceOf(UnauthorizedException.class);
+    }
 }

@@ -427,7 +427,7 @@ function TableRow({
   onRemarksChange: (next: string) => void;
   onOpen: () => void;
 }) {
-  const { isOwner, canEditProgress } = useTaskPermissions(task);
+  const { isOwner, canEditProgress, canAssign } = useTaskPermissions(task);
 
   return (
     <motion.div
@@ -465,10 +465,10 @@ function TableRow({
         )}
       </div>
       <div className="flex items-center justify-center py-1 bg-canvas-bg group-hover:bg-surface-subtle/70">
-        <OwnerPicker taskId={task.id} ownerId={task.ownerId} size="sm" disabled={!isOwner} />
+        <OwnerPicker taskId={task.id} ownerId={task.ownerId} size="sm" disabled={!canAssign} />
       </div>
       <div className="flex items-center justify-center py-1 bg-canvas-bg group-hover:bg-surface-subtle/70">
-        <AssigneesPicker value={task.assigneeIds ?? []} onChange={onAssigneesChange} size="sm" disabled={!isOwner} />
+        <AssigneesPicker value={task.assigneeIds ?? []} onChange={onAssigneesChange} size="sm" disabled={!canAssign} />
       </div>
       <div className="flex items-center justify-center p-1 bg-canvas-bg group-hover:bg-surface-subtle/70">
         <StatusPill status={task.status} onChange={canEditProgress ? onStatusChange : undefined} variant="full" />
@@ -544,7 +544,7 @@ function TaskCardMobile({
   onStatusChange: (s: Task["status"]) => void;
   onOpen: () => void;
 }) {
-  const { isOwner, canEditProgress } = useTaskPermissions(task);
+  const { canEditProgress, canAssign } = useTaskPermissions(task);
 
   return (
     <div className="rounded-lg bg-surface-subtle p-space-sm flex flex-col gap-space-sm">
@@ -555,7 +555,7 @@ function TaskCardMobile({
         >
           {task.title}
         </button>
-        <OwnerPicker taskId={task.id} ownerId={task.ownerId} size="sm" disabled={!isOwner} />
+        <OwnerPicker taskId={task.id} ownerId={task.ownerId} size="sm" disabled={!canAssign} />
       </div>
       <div className="flex items-center justify-between gap-space-sm">
         <StatusPill status={task.status} onChange={canEditProgress ? onStatusChange : undefined} variant="chip" />

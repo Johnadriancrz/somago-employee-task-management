@@ -166,6 +166,86 @@ class AuthControllerTest {
         assertThat(result).bodyJson().extractingPath("$.ok").isEqualTo(true);
     }
 
+    @Test
+    void changePasswordSucceedsAndTheNewPasswordThenLogsInWhileTheOldOneFails() {
+        givePersonACredential("sarah-chen", "correct-horse");
+        String token = login("sarah.chen@workos.dev", "correct-horse");
+
+        MvcTestResult result = mvc.post().uri("/api/auth/change-password")
+                .cookie(new Cookie(AuthService.COOKIE_NAME, token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"currentPassword\": \"correct-horse\", \"newPassword\": \"new-password-123\"}")
+                .exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result).bodyJson().extractingPath("$.ok").isEqualTo(true);
+
+        MvcTestResult oldPasswordLogin = mvc.post().uri("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": \"sarah.chen@workos.dev\", \"password\": \"correct-horse\"}")
+                .exchange();
+        assertThat(oldPasswordLogin).hasStatus(401);
+
+        MvcTestResult newPasswordLogin = mvc.post().uri("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": \"sarah.chen@workos.dev\", \"password\": \"new-password-123\"}")
+                .exchange();
+        assertThat(newPasswordLogin).hasStatusOk();
+    }
+
+    @Test
+    void changePasswordRejectsAnIncorrectCurrentPasswordWith401() {
+        givePersonACredential("sarah-chen", "correct-horse");
+        String token = login("sarah.chen@workos.dev", "correct-horse");
+
+        MvcTestResult result = mvc.post().uri("/api/auth/change-password")
+                .cookie(new Cookie(AuthService.COOKIE_NAME, token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"currentPassword\": \"wrong\", \"newPassword\": \"new-password-123\"}")
+                .exchange();
+
+        assertThat(result).hasStatus(401);
+        assertThat(result).bodyJson().extractingPath("$.error").isNotNull();
+    }
+
+    @Test
+    void changePasswordRejectsAnUnauthenticatedCallerWith401() {
+        MvcTestResult result = mvc.post().uri("/api/auth/change-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"currentPassword\": \"whatever\", \"newPassword\": \"new-password-123\"}")
+                .exchange();
+
+        assertThat(result).hasStatus(401);
+    }
+
+    @Test
+    void changePasswordRejectsAShortNewPasswordWith400() {
+        givePersonACredential("sarah-chen", "correct-horse");
+        String token = login("sarah.chen@workos.dev", "correct-horse");
+
+        MvcTestResult result = mvc.post().uri("/api/auth/change-password")
+                .cookie(new Cookie(AuthService.COOKIE_NAME, token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"currentPassword\": \"correct-horse\", \"newPassword\": \"short\"}")
+                .exchange();
+
+        assertThat(result).hasStatus(400);
+    }
+
+    @Test
+    void changePasswordResponseNeverIncludesThePasswordHash() throws java.io.UnsupportedEncodingException {
+        givePersonACredential("sarah-chen", "correct-horse");
+        String token = login("sarah.chen@workos.dev", "correct-horse");
+
+        MvcTestResult result = mvc.post().uri("/api/auth/change-password")
+                .cookie(new Cookie(AuthService.COOKIE_NAME, token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"currentPassword\": \"correct-horse\", \"newPassword\": \"new-password-123\"}")
+                .exchange();
+
+        assertThat(result.getResponse().getContentAsString()).doesNotContain("passwordHash");
+    }
+
     private String login(String email, String password) {
         MvcTestResult result = mvc.post().uri("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
