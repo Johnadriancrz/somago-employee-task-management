@@ -434,7 +434,7 @@ class TaskControllerTest {
 
     @Test
     void patchOwnerCanReassignOwnerIdWhenGrantedCeoRole() {
-        BoardMeta board = newBoard("sarah-chen");
+        BoardMeta board = newBoard("sarah-chen", "alex-morgan");
         Task task = newTask("sarah-chen", board.getId());
         grantSarahChenAccessRole("CEO");
 

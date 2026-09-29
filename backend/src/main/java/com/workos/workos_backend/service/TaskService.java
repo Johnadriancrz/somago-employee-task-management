@@ -177,6 +177,7 @@ public class TaskService {
         }
 
         TaskStatus previousStatus = task.getStatus();
+        Person previousOwner = task.getOwner();
 
         // Core fields (reachable only if isOwner, or none were attempted).
         if (patch.title() != null) {
@@ -189,7 +190,7 @@ public class TaskService {
             task.setGroup(TaskGroup.fromValue(patch.group()));
         }
         if (patch.ownerId() != null) {
-            task.setOwner(resolvePerson(patch.ownerId()));
+            task.setOwner(resolveOwnerForWorkspace(patch.ownerId(), task.getBoard().getWorkspace()));
         }
         if (patch.assigneeIds() != null) {
             task.clearAssignees();
@@ -245,6 +246,9 @@ public class TaskService {
         }
 
         Task saved = taskRepository.save(task);
+        if (patch.ownerId() != null && !saved.getOwner().getId().equals(previousOwner.getId())) {
+            notifyTaskAssigned(actorId, saved);
+        }
         if (patch.status() != null && task.getStatus() != previousStatus) {
             notifyStatusChange(actorId, task);
         }
@@ -298,6 +302,33 @@ public class TaskService {
     private Person resolvePerson(String personId) {
         return personRepository.findById(personId)
                 .orElseThrow(() -> new ResourceNotFoundException("Unknown person id: " + personId));
+    }
+
+    /**
+     * Spec S2: closes a pre-existing gap where {@link #resolvePerson} only
+     * checked that a person exists, never that they could actually access
+     * the task's workspace. A new owner must be a member of {@code
+     * task.board.workspace} — checked the same way {@link #requireMember}
+     * checks the acting person, by id rather than entity equality — or the
+     * whole update is rejected before anything is saved and before any
+     * TASK_ASSIGNED notification is created.
+     */
+    private Person resolveOwnerForWorkspace(String personId, Workspace workspace) {
+        Person person = resolvePerson(personId);
+        boolean isMember = workspace.getMembers().stream().anyMatch(member -> member.getId().equals(personId));
+        if (!isMember) {
+            throw new ForbiddenException("New owner must be a member of this workspace");
+        }
+        return person;
+    }
+
+    /** Spec S2: a task's owner changing to a different person notifies the new owner alone — never the actor or management. */
+    private void notifyTaskAssigned(String actorId, Task task) {
+        Person actor = personRepository.findById(actorId)
+                .orElseThrow(() -> new IllegalStateException("Acting person not found: " + actorId));
+        Person newOwner = task.getOwner();
+        notificationService.notifyRecipients(actorId, List.of(newOwner.getId()), NotificationEventType.TASK_ASSIGNED,
+                actor.getName() + " assigned \"" + task.getTitle() + "\" to " + newOwner.getName() + ".");
     }
 
     private Task resolveDependsOn(String dependsOnTaskId, String selfTaskId) {

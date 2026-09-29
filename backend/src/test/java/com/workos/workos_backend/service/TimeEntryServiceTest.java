@@ -191,6 +191,14 @@ class TimeEntryServiceTest {
     }
 
     @Test
+    void clockInRejectsHrWithForbidden() {
+        String hrId = newAccount("HR");
+
+        assertThatThrownBy(() -> timeEntryService.clockIn(hrId))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
     void listEntriesForOperationManagerAlsoStaysScopedToSelf() {
         timeEntryService.clockIn("sarah-chen");
         timeEntryService.clockIn("alex-morgan");

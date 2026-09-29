@@ -17,6 +17,8 @@ import com.workos.workos_backend.dto.CreateTaskRequest;
 import com.workos.workos_backend.dto.SubtaskInput;
 import com.workos.workos_backend.dto.UpdateTaskRequest;
 import com.workos.workos_backend.entity.BoardMeta;
+import com.workos.workos_backend.entity.Notification;
+import com.workos.workos_backend.entity.NotificationEventType;
 import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.Task;
 import com.workos.workos_backend.entity.TaskStatus;
@@ -52,6 +54,9 @@ class TaskServiceTest {
 
     @Autowired
     private AccountService accountService;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Autowired
     private EntityManager entityManager;
@@ -375,7 +380,7 @@ class TaskServiceTest {
 
     @Test
     void ceoOwnerCanReassignTaskOwnership() {
-        BoardMeta board = newBoard("sarah-chen");
+        BoardMeta board = newBoard("sarah-chen", "alex-morgan");
         String ceoId = accountService.createAccount(
                 "CEO", "ceo-" + UUID.randomUUID() + "@workos.dev", "Password123!", "CEO").getId();
         workspaceService.addMember("sarah-chen", board.getWorkspace().getId(), ceoId);
@@ -389,7 +394,7 @@ class TaskServiceTest {
 
     @Test
     void operationManagerOwnerCanReassignTaskOwnership() {
-        BoardMeta board = newBoard("sarah-chen");
+        BoardMeta board = newBoard("sarah-chen", "alex-morgan");
         String omId = newOperationManagerMember(board, "sarah-chen");
         Task task = taskService.createTask(omId, createRequest(board.getId()));
 
@@ -397,6 +402,113 @@ class TaskServiceTest {
                 null, null, null, "alex-morgan", null, null, null, null, null, null, null, null, null, null, null, null, null));
 
         assertThat(updated.getOwner().getId()).isEqualTo("alex-morgan");
+    }
+
+    @Test
+    void reassigningOwnerToANonWorkspaceMemberIsRejected() {
+        BoardMeta board = newBoard("sarah-chen");
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
+        String outsiderId = accountService.createAccount(
+                "Outsider", "outsider-" + UUID.randomUUID() + "@workos.dev", "Password123!", "IT").getId();
+
+        assertThatThrownBy(() -> taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
+                null, null, null, outsiderId, null, null, null, null, null, null, null, null, null, null, null, null, null)))
+                .isInstanceOf(ForbiddenException.class);
+
+        Task reloaded = taskRepository.findById(task.getId()).orElseThrow();
+        assertThat(reloaded.getOwner().getId()).isEqualTo(omId);
+        assertThat(notificationService.listForRecipient(outsiderId)).isEmpty();
+    }
+
+    @Test
+    void reassigningOwnerToAFellowWorkspaceMemberSucceeds() {
+        BoardMeta board = newBoard("sarah-chen", "alex-morgan");
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
+
+        Task updated = taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
+                null, null, null, "alex-morgan", null, null, null, null, null, null, null, null, null, null, null, null, null));
+
+        assertThat(updated.getOwner().getId()).isEqualTo("alex-morgan");
+    }
+
+    // ---- TASK_ASSIGNED (spec section S2) ----
+
+    @Test
+    void reassigningOwnerToADifferentPersonSendsTaskAssignedToTheNewOwnerOnly() {
+        BoardMeta board = newBoard("sarah-chen", "alex-morgan");
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
+
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
+                null, null, null, "alex-morgan", null, null, null, null, null, null, null, null, null, null, null, null, null));
+
+        assertThat(notificationService.listForRecipient("alex-morgan")).hasSize(1);
+        assertThat(notificationService.listForRecipient("alex-morgan").get(0).getEventType())
+                .isEqualTo(NotificationEventType.TASK_ASSIGNED);
+        // Neither the actor (omId) nor management should receive TASK_ASSIGNED — it is a targeted event.
+        assertThat(notificationService.listForRecipient(omId)).isEmpty();
+    }
+
+    @Test
+    void reassigningOwnerToTheSamePersonSendsNoTaskAssignedNotification() {
+        BoardMeta board = newBoard("sarah-chen");
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
+
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
+                null, null, null, omId, null, null, null, null, null, null, null, null, null, null, null, null, null));
+
+        assertThat(notificationService.listForRecipient(omId)).isEmpty();
+    }
+
+    @Test
+    void omittingOwnerIdSendsNoTaskAssignedNotification() {
+        BoardMeta board = newBoard("sarah-chen");
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
+
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
+                null, null, "working", null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+
+        assertThat(notificationService.listForRecipient(omId).stream()
+                .noneMatch(n -> n.getEventType() == NotificationEventType.TASK_ASSIGNED)).isTrue();
+    }
+
+    @Test
+    void newTaskAlwaysHasTheCreatorAsOwnerSoCreationNeverSendsTaskAssigned() {
+        // Spec S2: createTask() derives owner from the actor unconditionally
+        // (ownerId in CreateTaskRequest is dead/ignored) — there is no
+        // "create a task and assign it to someone else" path to notify.
+        BoardMeta board = newBoard("sarah-chen");
+
+        Task task = taskService.createTask("sarah-chen", createRequest(board.getId()));
+
+        assertThat(task.getOwner().getId()).isEqualTo("sarah-chen");
+        assertThat(notificationService.listForRecipient("sarah-chen").stream()
+                .noneMatch(n -> n.getEventType() == NotificationEventType.TASK_ASSIGNED)).isTrue();
+    }
+
+    @Test
+    void assignmentAndStatusChangeInOnePatchFireTwoIndependentNotifications() {
+        BoardMeta board = newBoard("sarah-chen", "alex-morgan");
+        String omId = newOperationManagerMember(board, "sarah-chen");
+        Task task = taskService.createTask(omId, createRequest(board.getId()));
+
+        taskService.updateTask(omId, task.getId(), new UpdateTaskRequest(
+                null, null, "working", "alex-morgan", null, null, null, null, null, null, null, null, null, null, null, null, null));
+
+        assertThat(notificationService.listForRecipient("alex-morgan")).hasSize(1);
+        assertThat(notificationService.listForRecipient("alex-morgan").get(0).getEventType())
+                .isEqualTo(NotificationEventType.TASK_ASSIGNED);
+
+        // TASK_WORKING still goes to management + actor (omId), separately, with its own event id.
+        List<Notification> omNotifications = notificationService.listForRecipient(omId);
+        assertThat(omNotifications).hasSize(1);
+        assertThat(omNotifications.get(0).getEventType()).isEqualTo(NotificationEventType.TASK_WORKING);
+        assertThat(omNotifications.get(0).getEventId())
+                .isNotEqualTo(notificationService.listForRecipient("alex-morgan").get(0).getEventId());
     }
 
     @Test

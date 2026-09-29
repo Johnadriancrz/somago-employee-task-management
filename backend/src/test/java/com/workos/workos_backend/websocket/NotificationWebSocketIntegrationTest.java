@@ -16,12 +16,16 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
@@ -31,15 +35,22 @@ import com.workos.workos_backend.dto.CreateTaskRequest;
 import com.workos.workos_backend.dto.NotificationResponse;
 import com.workos.workos_backend.dto.UpdateTaskRequest;
 import com.workos.workos_backend.entity.BoardMeta;
+import com.workos.workos_backend.entity.Notification;
 import com.workos.workos_backend.entity.NotificationEventType;
 import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.Task;
 import com.workos.workos_backend.entity.Workspace;
+import com.workos.workos_backend.entity.OvertimeRequest;
+import com.workos.workos_backend.repository.NotificationPreferenceRepository;
+import com.workos.workos_backend.repository.NotificationRepository;
+import com.workos.workos_backend.repository.PersonRepository;
+import com.workos.workos_backend.scheduler.ClockOutReminderScheduler;
 import com.workos.workos_backend.service.AccountService;
 import com.workos.workos_backend.service.AuthService;
 import com.workos.workos_backend.service.BoardService;
 import com.workos.workos_backend.service.ChatService;
 import com.workos.workos_backend.service.NotificationService;
+import com.workos.workos_backend.service.OvertimeRequestService;
 import com.workos.workos_backend.service.TaskService;
 import com.workos.workos_backend.service.TimeEntryService;
 import com.workos.workos_backend.service.WorkspaceService;
@@ -93,6 +104,24 @@ class NotificationWebSocketIntegrationTest {
 
     @Autowired
     private TaskService taskService;
+
+    @Autowired
+    private OvertimeRequestService overtimeRequestService;
+
+    @Autowired
+    private ClockOutReminderScheduler clockOutReminderScheduler;
+
+    @Autowired
+    private NotificationRepository notificationRepository;
+
+    @Autowired
+    private NotificationPreferenceRepository notificationPreferenceRepository;
+
+    @Autowired
+    private PersonRepository personRepository;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     private WebSocketStompClient stompClient;
     private final List<StompSession> openSessions = new ArrayList<>();
@@ -305,6 +334,162 @@ class NotificationWebSocketIntegrationTest {
         NotificationResponse received = queue.poll(RECEIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         assertThat(received).isNotNull();
         assertThat(received.eventType()).isEqualTo(expectedEventType);
+    }
+
+    // ---- TASK_ASSIGNED: targeted delivery (spec section S2) ----
+
+    @Test
+    void taskAssignedEventIsPublishedOnlyToTheNewOwner() throws Exception {
+        TestAccount om = createAccountAndLogin("Operation Manager");
+        TestAccount newOwner = createAccountAndLogin("IT");
+        Workspace workspace =
+                workspaceService.createWorkspace(om.person().getId(), "WS " + UUID.randomUUID(), null);
+        workspaceService.addMember(om.person().getId(), workspace.getId(), newOwner.person().getId());
+        BoardMeta board = boardService.createBoard(om.person().getId(), workspace.getId(), "Board", "", null);
+        Task task = taskService.createTask(om.person().getId(), new CreateTaskRequest(
+                board.getId(), "Task", "this-week", "not-started", null, null, null, 1,
+                "2026-01-01", "2026-01-01", "2026-01-01", 0, null, null, null, null, null));
+
+        StompSession ownerSession = connect(newOwner.token());
+        BlockingQueue<NotificationResponse> ownerQueue = subscribe(ownerSession, newOwner.person().getId());
+        StompSession omSession = connect(om.token());
+        BlockingQueue<NotificationResponse> omQueue = subscribe(omSession, om.person().getId());
+        settle();
+
+        taskService.updateTask(om.person().getId(), task.getId(), new UpdateTaskRequest(
+                null, null, null, newOwner.person().getId(), null, null, null, null, null, null, null, null, null,
+                null, null, null, null));
+
+        NotificationResponse received = ownerQueue.poll(RECEIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        assertThat(received).isNotNull();
+        assertThat(received.eventType()).isEqualTo("TASK_ASSIGNED");
+
+        assertThat(omQueue.poll(NO_RECEIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                .as("the actor who reassigned the task must not receive a TASK_ASSIGNED notification")
+                .isNull();
+    }
+
+    // ---- Time Clock + Overtime: targeted delivery ----
+
+    @Test
+    void overtimeRequestedEventIsPublishedOnlyToCeoHr() throws Exception {
+        TestAccount ceo = createAccountAndLogin("CEO");
+        TestAccount employee = createAccountAndLogin("IT");
+        StompSession ceoSession = connect(ceo.token());
+        BlockingQueue<NotificationResponse> ceoQueue = subscribe(ceoSession, ceo.person().getId());
+        StompSession employeeSession = connect(employee.token());
+        BlockingQueue<NotificationResponse> employeeQueue = subscribe(employeeSession, employee.person().getId());
+        settle();
+
+        overtimeRequestService.createRequest(employee.person().getId(), "2026-01-05", 2.0, "Deadline push");
+
+        NotificationResponse received = ceoQueue.poll(RECEIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        assertThat(received).isNotNull();
+        assertThat(received.eventType()).isEqualTo("OVERTIME_REQUESTED");
+
+        assertThat(employeeQueue.poll(NO_RECEIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                .as("the requester must not receive their own OVERTIME_REQUESTED notification")
+                .isNull();
+    }
+
+    @Test
+    void overtimeApprovedEventIsPublishedOnlyToTheRequester() throws Exception {
+        TestAccount ceo = createAccountAndLogin("CEO");
+        TestAccount employee = createAccountAndLogin("IT");
+        OvertimeRequest request = overtimeRequestService.createRequest(
+                employee.person().getId(), "2026-01-05", 2.0, "Deadline push");
+
+        StompSession employeeSession = connect(employee.token());
+        BlockingQueue<NotificationResponse> employeeQueue = subscribe(employeeSession, employee.person().getId());
+        StompSession ceoSession = connect(ceo.token());
+        BlockingQueue<NotificationResponse> ceoQueue = subscribe(ceoSession, ceo.person().getId());
+        settle();
+
+        overtimeRequestService.approve(ceo.person().getId(), request.getId(), null);
+
+        NotificationResponse received = employeeQueue.poll(RECEIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        assertThat(received).isNotNull();
+        assertThat(received.eventType()).isEqualTo("OVERTIME_APPROVED");
+
+        assertThat(ceoQueue.poll(NO_RECEIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                .as("the reviewer must not receive a copy of the requester's OVERTIME_APPROVED notification")
+                .isNull();
+    }
+
+    @Test
+    void overtimeRejectedEventIsPublishedOnlyToTheRequester() throws Exception {
+        TestAccount hr = createAccountAndLogin("HR");
+        TestAccount employee = createAccountAndLogin("IT");
+        OvertimeRequest request = overtimeRequestService.createRequest(
+                employee.person().getId(), "2026-01-05", 2.0, "Deadline push");
+
+        StompSession employeeSession = connect(employee.token());
+        BlockingQueue<NotificationResponse> employeeQueue = subscribe(employeeSession, employee.person().getId());
+        settle();
+
+        overtimeRequestService.reject(hr.person().getId(), request.getId(), "Not justified");
+
+        NotificationResponse received = employeeQueue.poll(RECEIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        assertThat(received).isNotNull();
+        assertThat(received.eventType()).isEqualTo("OVERTIME_REJECTED");
+    }
+
+    @Test
+    void clockOutReminderEventIsPublishedOverWebSocket() throws Exception {
+        TestAccount employee = createAccountAndLogin("IT");
+        timeEntryService.clockIn(employee.person().getId());
+        StompSession session = connect(employee.token());
+        BlockingQueue<NotificationResponse> queue = subscribe(session, employee.person().getId());
+        settle();
+
+        clockOutReminderScheduler.remindOpenClockIns();
+
+        NotificationResponse received = queue.poll(RECEIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        assertThat(received).isNotNull();
+        assertThat(received.eventType()).isEqualTo("CLOCK_OUT_REMINDER");
+    }
+
+    // ---- Transaction/commit ordering (spec sections 7, 10) ----
+
+    @Test
+    void notificationIsNeitherPersistedNorPublishedIfTheEnclosingTransactionRollsBack() throws Exception {
+        TestAccount employee = createAccountAndLogin("IT");
+        StompSession session = connect(employee.token());
+        BlockingQueue<NotificationResponse> queue = subscribe(session, employee.person().getId());
+        settle();
+
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        List<String> createdId = new ArrayList<>();
+        transactionTemplate.executeWithoutResult(status -> {
+            List<Notification> created = notificationService.notifyRecipients(employee.person().getId(),
+                    List.of(employee.person().getId()), NotificationEventType.TASK_ASSIGNED, "Assigned to you.");
+            createdId.add(created.get(0).getId());
+            status.setRollbackOnly();
+        });
+
+        assertThat(queue.poll(NO_RECEIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                .as("a rolled-back transaction must never publish its notification")
+                .isNull();
+        assertThat(notificationRepository.findById(createdId.get(0)))
+                .as("a rolled-back transaction must never persist its notification")
+                .isEmpty();
+    }
+
+    @Test
+    void webSocketDeliveryFailureDoesNotRollBackTheAlreadyPersistedNotification() {
+        TestAccount employee = createAccountAndLogin("IT");
+        MessageChannel throwingChannel = (message, timeout) -> {
+            throw new RuntimeException("simulated broker failure");
+        };
+        NotificationService serviceWithFailingSocket = new NotificationService(
+                notificationRepository, notificationPreferenceRepository, personRepository,
+                new SimpMessagingTemplate(throwingChannel));
+
+        List<Notification> created = serviceWithFailingSocket.notify(
+                employee.person().getId(), NotificationEventType.CLOCK_IN, "Clocked in.");
+
+        assertThat(created).isNotEmpty();
+        assertThat(notificationRepository.findById(created.get(0).getId())).isPresent();
     }
 
     private record TestAccount(Person person, String token) {

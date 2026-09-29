@@ -9,6 +9,7 @@ import {
   LogIn,
   LogOut,
   MessageCircle,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
@@ -30,6 +31,7 @@ const EVENT_ICON: Record<NotificationEventType, LucideIcon> = {
   TASK_STUCK: AlertTriangle,
   TASK_DONE: CheckCircle2,
   BOARD_CREATED: LayoutGrid,
+  TASK_ASSIGNED: UserPlus,
 };
 
 const EVENT_TONE: Record<NotificationEventType, string> = {
@@ -40,6 +42,7 @@ const EVENT_TONE: Record<NotificationEventType, string> = {
   TASK_STUCK: "bg-status-stuck/15 text-status-stuck",
   TASK_DONE: "bg-status-done/15 text-status-done",
   BOARD_CREATED: "bg-primary/10 text-primary",
+  TASK_ASSIGNED: "bg-primary/10 text-primary",
 };
 
 const EVENT_LABEL: Record<NotificationEventType, string> = {
@@ -50,6 +53,7 @@ const EVENT_LABEL: Record<NotificationEventType, string> = {
   TASK_STUCK: "Task stuck",
   TASK_DONE: "Task done",
   BOARD_CREATED: "Board created",
+  TASK_ASSIGNED: "Task assigned to you",
 };
 
 export default function NotificationsPage() {

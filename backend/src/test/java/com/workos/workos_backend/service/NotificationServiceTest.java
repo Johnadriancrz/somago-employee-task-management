@@ -12,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.workos.workos_backend.dto.UpdateNotificationPreferencesRequest;
 import com.workos.workos_backend.entity.Notification;
 import com.workos.workos_backend.entity.NotificationEventType;
 import com.workos.workos_backend.entity.Person;
@@ -34,6 +35,9 @@ class NotificationServiceTest {
 
     @Autowired
     private AccountService accountService;
+
+    @Autowired
+    private NotificationPreferenceService notificationPreferenceService;
 
     private String newAccount(String accessRole) {
         Person person = accountService.createAccount(
@@ -174,5 +178,134 @@ class NotificationServiceTest {
 
         assertThat(notificationService.listForRecipient(ceoId)).allMatch(Notification::isRead);
         assertThat(notificationService.listForRecipient("sarah-chen").get(0).isRead()).isFalse();
+    }
+
+    // ---- notifyRecipients: targeted notification primitive (spec section S2) ----
+
+    @Test
+    void notifyRecipientsCreatesExactlyOneRowForOneRecipient() {
+        String recipientId = newAccount("IT");
+
+        List<Notification> created = notificationService.notifyRecipients(
+                "sarah-chen", List.of(recipientId), NotificationEventType.TASK_ASSIGNED, "Assigned to you.");
+
+        assertThat(created).hasSize(1);
+        assertThat(notificationService.listForRecipient(recipientId)).hasSize(1);
+    }
+
+    @Test
+    void notifyRecipientsDeduplicatesARepeatedRecipientIdIntoOneRow() {
+        String recipientId = newAccount("IT");
+
+        List<Notification> created = notificationService.notifyRecipients("sarah-chen",
+                List.of(recipientId, recipientId, recipientId), NotificationEventType.TASK_ASSIGNED,
+                "Assigned to you.");
+
+        assertThat(created).hasSize(1);
+        assertThat(notificationService.listForRecipient(recipientId)).hasSize(1);
+    }
+
+    @Test
+    void notifyRecipientsCreatesOneRowPerDistinctRecipient() {
+        String first = newAccount("IT");
+        String second = newAccount("IT");
+
+        List<Notification> created = notificationService.notifyRecipients("sarah-chen",
+                List.of(first, second), NotificationEventType.TASK_ASSIGNED, "Assigned to you.");
+
+        assertThat(created).hasSize(2);
+        assertThat(notificationService.listForRecipient(first)).hasSize(1);
+        assertThat(notificationService.listForRecipient(second)).hasSize(1);
+    }
+
+    @Test
+    void notifyRecipientsDoesNotAutomaticallyAddTheActor() {
+        String recipientId = newAccount("IT");
+
+        notificationService.notifyRecipients(
+                "sarah-chen", List.of(recipientId), NotificationEventType.TASK_ASSIGNED, "Assigned to you.");
+
+        assertThat(notificationService.listForRecipient("sarah-chen")).isEmpty();
+    }
+
+    @Test
+    void notifyRecipientsIsANoOpForAnEmptyRecipientList() {
+        List<Notification> created = notificationService.notifyRecipients(
+                "sarah-chen", List.of(), NotificationEventType.TASK_ASSIGNED, "Assigned to you.");
+
+        assertThat(created).isEmpty();
+    }
+
+    @Test
+    void notifyRecipientsRejectsAnUnknownRecipientId() {
+        assertThatThrownBy(() -> notificationService.notifyRecipients(
+                "sarah-chen", List.of("does-not-exist"), NotificationEventType.TASK_ASSIGNED, "Assigned to you."))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void existingNotifyManagementPlusActorBehaviorIsUnaffectedByNotifyRecipients() {
+        String ceoId = newAccount("CEO");
+
+        List<Notification> created =
+                notificationService.notify("sarah-chen", NotificationEventType.CLOCK_IN, "Sarah Chen clocked in.");
+
+        assertThat(created).hasSize(2);
+        assertThat(notificationService.listForRecipient("sarah-chen")).hasSize(1);
+        assertThat(notificationService.listForRecipient(ceoId)).hasSize(1);
+    }
+
+    // ---- TASK_ASSIGNED preference enforcement (taskAssignedEnabled) ----
+
+    @Test
+    void taskAssignedEnabledFalseSuppressesTheNotificationRowForThatRecipient() {
+        String recipientId = newAccount("IT");
+        notificationPreferenceService.updatePreferences(
+                recipientId, new UpdateNotificationPreferencesRequest(null, false, null, null));
+
+        List<Notification> created = notificationService.notifyRecipients(
+                "sarah-chen", List.of(recipientId), NotificationEventType.TASK_ASSIGNED, "Assigned to you.");
+
+        assertThat(created).isEmpty();
+        assertThat(notificationService.listForRecipient(recipientId)).isEmpty();
+    }
+
+    @Test
+    void taskAssignedEnabledTrueDeliversTheNotification() {
+        String recipientId = newAccount("IT");
+        notificationPreferenceService.updatePreferences(
+                recipientId, new UpdateNotificationPreferencesRequest(null, true, null, null));
+
+        List<Notification> created = notificationService.notifyRecipients(
+                "sarah-chen", List.of(recipientId), NotificationEventType.TASK_ASSIGNED, "Assigned to you.");
+
+        assertThat(created).hasSize(1);
+        assertThat(notificationService.listForRecipient(recipientId)).hasSize(1);
+    }
+
+    @Test
+    void allRecipientsFilteredOutByPreferenceIsASafeNoOp() {
+        String first = newAccount("IT");
+        String second = newAccount("IT");
+        notificationPreferenceService.updatePreferences(
+                first, new UpdateNotificationPreferencesRequest(null, false, null, null));
+        notificationPreferenceService.updatePreferences(
+                second, new UpdateNotificationPreferencesRequest(null, false, null, null));
+
+        List<Notification> created = notificationService.notifyRecipients(
+                "sarah-chen", List.of(first, second), NotificationEventType.TASK_ASSIGNED, "Assigned to you.");
+
+        assertThat(created).isEmpty();
+    }
+
+    @Test
+    void taskAssignedPreferenceDoesNotSuppressUnrelatedManagementNotifications() {
+        String recipientId = newAccount("IT");
+        notificationPreferenceService.updatePreferences(
+                recipientId, new UpdateNotificationPreferencesRequest(null, false, null, null));
+
+        notificationService.notify(recipientId, NotificationEventType.CLOCK_IN, "Clocked in.");
+
+        assertThat(notificationService.listForRecipient(recipientId)).hasSize(1);
     }
 }

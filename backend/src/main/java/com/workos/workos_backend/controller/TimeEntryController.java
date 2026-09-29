@@ -13,18 +13,23 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.workos.workos_backend.actor.ActingPersonResolver;
 import com.workos.workos_backend.dto.TimeEntryResponse;
+import com.workos.workos_backend.dto.TimeSummaryDayResponse;
 import com.workos.workos_backend.service.TimeEntryService;
+import com.workos.workos_backend.service.TimeSummaryService;
 
-/** Implements the Time clock endpoint table from BACKEND.md. */
+/** Implements the Time clock endpoint table from BACKEND.md, plus the Time Clock + Overtime summary endpoint. */
 @RestController
 @RequestMapping("/api/time")
 public class TimeEntryController {
 
     private final TimeEntryService timeEntryService;
+    private final TimeSummaryService timeSummaryService;
     private final ActingPersonResolver actingPersonResolver;
 
-    public TimeEntryController(TimeEntryService timeEntryService, ActingPersonResolver actingPersonResolver) {
+    public TimeEntryController(TimeEntryService timeEntryService, TimeSummaryService timeSummaryService,
+            ActingPersonResolver actingPersonResolver) {
         this.timeEntryService = timeEntryService;
+        this.timeSummaryService = timeSummaryService;
         this.actingPersonResolver = actingPersonResolver;
     }
 
@@ -56,5 +61,13 @@ public class TimeEntryController {
     public List<TimeEntryResponse> entries(@RequestParam(required = false) String personId) {
         String actorId = actingPersonResolver.currentPersonId();
         return timeEntryService.listEntries(actorId, personId).stream().map(TimeEntryResponse::from).toList();
+    }
+
+    /** Regular vs. approved-overtime hours per business-calendar workday — see TimeSummaryService. */
+    @GetMapping("/summary")
+    public List<TimeSummaryDayResponse> summary(@RequestParam(required = false) String personId,
+            @RequestParam(required = false) String start, @RequestParam(required = false) String end) {
+        String actorId = actingPersonResolver.currentPersonId();
+        return timeSummaryService.summarize(actorId, personId, start, end);
     }
 }

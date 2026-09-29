@@ -17,4 +17,7 @@ public interface TimeEntryRepository extends JpaRepository<TimeEntry, String> {
 
     /** GET /api/time/entries?personId=... — one person's entries, oldest first. */
     List<TimeEntry> findByPersonIdOrderByClockInAsc(String personId);
+
+    /** Everyone currently clocked in — backs ClockOutReminderScheduler. */
+    List<TimeEntry> findAllByClockOutIsNull();
 }

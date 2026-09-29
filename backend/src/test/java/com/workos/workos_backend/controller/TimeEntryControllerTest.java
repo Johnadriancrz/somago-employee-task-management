@@ -140,6 +140,15 @@ class TimeEntryControllerTest {
     }
 
     @Test
+    void clockInReturns403ForHr() {
+        grantSarahChenAccessRole("HR");
+
+        MvcTestResult result = mvc.post().uri("/api/time/clock-in").exchange();
+
+        assertThat(result).hasStatus(403);
+    }
+
+    @Test
     void entriesForNonPrivilegedActorOnlyReturnsOwnEntriesEvenWithNoFilter() {
         timeEntryService.clockIn("alex-morgan");
         mvc.post().uri("/api/time/clock-in").exchange();

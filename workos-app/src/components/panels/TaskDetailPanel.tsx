@@ -7,6 +7,7 @@ import { useBoard } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useConfirm } from "@/lib/confirm";
 import { useTaskPermissions } from "@/lib/permissions";
+import { isNewTaskFormValid } from "@/lib/task-form-validation";
 import { toDueLabel } from "@/lib/dates";
 import { STATUS_LABEL, STATUS_ORDER, type Attachment, type Status, type Subtask, type Task, type TaskGroup } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
@@ -127,7 +128,7 @@ export function TaskDetailPanel() {
   );
 }
 
-function TaskForm({
+export function TaskForm({
   editingTask,
   defaults,
 }: {
@@ -152,6 +153,8 @@ function TaskForm({
       ? Math.round((form.subtasks.filter((s) => s.done).length / form.subtasks.length) * 100)
       : null;
   const displayProgress = subtaskProgress ?? form.progress;
+
+  const isNewTaskValid = isNewTaskFormValid(form);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -179,7 +182,11 @@ function TaskForm({
     setForm((prev) => ({ ...prev, subtasks: prev.subtasks.filter((s) => s.id !== id) }));
 
   const handleSave = () => {
-    if (!form.title.trim()) return;
+    if (editingTask) {
+      if (!form.title.trim()) return;
+    } else if (!isNewTaskValid) {
+      return;
+    }
 
     const patch = {
       title: form.title.trim(),
@@ -549,7 +556,11 @@ function TaskForm({
           <Button
             variant="primary"
             onClick={handleSave}
-            disabled={!form.title.trim() || (!canEditCore && !canEditProgress)}
+            disabled={
+              editingTask
+                ? !form.title.trim() || (!canEditCore && !canEditProgress)
+                : !isNewTaskValid
+            }
           >
             {editingTask ? "Save changes" : "Create task"}
           </Button>

@@ -143,7 +143,7 @@ export interface CompletedTaskReport {
   end: string;
 }
 
-/** Matches NotificationEventType on the backend exactly — spec section 18. */
+/** Matches NotificationEventType on the backend exactly — spec section 18 (TASK_ASSIGNED added in section S2). */
 export type NotificationEventType =
   | "CHAT_MESSAGE"
   | "CLOCK_IN"
@@ -151,7 +151,8 @@ export type NotificationEventType =
   | "TASK_WORKING"
   | "TASK_STUCK"
   | "TASK_DONE"
-  | "BOARD_CREATED";
+  | "BOARD_CREATED"
+  | "TASK_ASSIGNED";
 
 /** Matches NotificationResponse on the backend exactly (both the REST list and the STOMP payload). */
 export interface Notification {

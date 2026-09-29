@@ -2,6 +2,7 @@ package com.workos.workos_backend.service;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,9 +20,11 @@ import com.workos.workos_backend.authorization.AccessRoles;
 import com.workos.workos_backend.dto.NotificationResponse;
 import com.workos.workos_backend.entity.Notification;
 import com.workos.workos_backend.entity.NotificationEventType;
+import com.workos.workos_backend.entity.NotificationPreference;
 import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.exception.ForbiddenException;
 import com.workos.workos_backend.exception.ResourceNotFoundException;
+import com.workos.workos_backend.repository.NotificationPreferenceRepository;
 import com.workos.workos_backend.repository.NotificationRepository;
 import com.workos.workos_backend.repository.PersonRepository;
 
@@ -54,12 +57,15 @@ public class NotificationService {
     public static final String STOMP_DESTINATION_PREFIX = "/topic/notifications/";
 
     private final NotificationRepository notificationRepository;
+    private final NotificationPreferenceRepository notificationPreferenceRepository;
     private final PersonRepository personRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
-    public NotificationService(NotificationRepository notificationRepository, PersonRepository personRepository,
+    public NotificationService(NotificationRepository notificationRepository,
+            NotificationPreferenceRepository notificationPreferenceRepository, PersonRepository personRepository,
             SimpMessagingTemplate messagingTemplate) {
         this.notificationRepository = notificationRepository;
+        this.notificationPreferenceRepository = notificationPreferenceRepository;
         this.personRepository = personRepository;
         this.messagingTemplate = messagingTemplate;
     }
@@ -90,6 +96,78 @@ public class NotificationService {
         List<Notification> saved = notificationRepository.saveAll(created);
         publishAfterCommit(saved);
         return saved;
+    }
+
+    /**
+     * Targeted-recipient primitive (spec section S2), distinct from {@link
+     * #notify}: delivers only to {@code recipientIds}, exactly as given by
+     * the business caller — the actor is never added automatically, unlike
+     * {@code notify()}'s management-plus-actor fan-out. Used for events with
+     * a genuinely narrow audience (e.g. {@code TASK_ASSIGNED} → the new owner
+     * alone), never as a replacement for the existing seven events.
+     *
+     * <p>{@code recipientIds} are resolved through real, trusted {@link
+     * Person} records and deduplicated before persisting, same as {@code
+     * notify()}'s own recipient map. A recipient id that doesn't resolve to a
+     * real person is an internal invariant violation (this method is never
+     * meant to be reachable with a client-supplied id) and fails loudly with
+     * {@link IllegalStateException}, mirroring how {@code notify()} treats an
+     * unresolvable actor id.
+     *
+     * <p>Per-recipient notification preferences are enforced here (never in
+     * {@code notify()}, which must keep unconditionally notifying management
+     * plus the actor) — a recipient who has disabled the given event type is
+     * silently filtered out rather than given a suppressed/hidden row. If
+     * every recipient is filtered out (or {@code recipientIds} was empty to
+     * begin with), this is a safe no-op: no event id, no rows, no publish.
+     */
+    @Transactional
+    public List<Notification> notifyRecipients(String actorId, List<String> recipientIds,
+            NotificationEventType eventType, String message) {
+        Person actor = personRepository.findById(actorId)
+                .orElseThrow(() -> new IllegalStateException("Acting person not found: " + actorId));
+
+        // LinkedHashMap keyed by person id, same dedup technique as notify() —
+        // a repeated id in the input list collapses to one map entry.
+        Map<String, Person> recipients = new LinkedHashMap<>();
+        for (String recipientId : recipientIds) {
+            Person recipient = personRepository.findById(recipientId)
+                    .orElseThrow(() -> new IllegalStateException("Recipient not found: " + recipientId));
+            if (isOptedIn(recipient.getId(), eventType)) {
+                recipients.put(recipient.getId(), recipient);
+            }
+        }
+        if (recipients.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        String eventId = UUID.randomUUID().toString();
+        Instant now = Instant.now();
+        List<Notification> created = new ArrayList<>();
+        for (Person recipient : recipients.values()) {
+            created.add(new Notification(
+                    UUID.randomUUID().toString(), eventId, recipient, actor, eventType, message, now));
+        }
+        List<Notification> saved = notificationRepository.saveAll(created);
+        publishAfterCommit(saved);
+        return saved;
+    }
+
+    /**
+     * Preference enforcement is per-recipient and only defined for event
+     * types that actually have a Settings toggle — right now, only {@code
+     * TASK_ASSIGNED}/{@code taskAssignedEnabled}. A recipient with no
+     * preference row yet defaults to enabled, matching {@link
+     * NotificationPreferenceService}'s own defaults, without creating a row
+     * as a side effect of sending a notification.
+     */
+    private boolean isOptedIn(String recipientId, NotificationEventType eventType) {
+        if (eventType != NotificationEventType.TASK_ASSIGNED) {
+            return true;
+        }
+        return notificationPreferenceRepository.findByPersonId(recipientId)
+                .map(NotificationPreference::isTaskAssignedEnabled)
+                .orElse(true);
     }
 
     /**
