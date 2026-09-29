@@ -9,6 +9,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import com.workos.workos_backend.websocket.ChatChannelInterceptor;
+import com.workos.workos_backend.websocket.NotificationChannelInterceptor;
 import com.workos.workos_backend.websocket.SessionHandshakeInterceptor;
 
 /**
@@ -36,6 +37,9 @@ class WebSocketConfigTest {
     private ChatChannelInterceptor chatChannelInterceptor;
 
     @Autowired
+    private NotificationChannelInterceptor notificationChannelInterceptor;
+
+    @Autowired
     private WebSocketConfig webSocketConfig;
 
     @Test
@@ -47,6 +51,7 @@ class WebSocketConfigTest {
     void handshakeAndChannelInterceptorsAreRegisteredBeans() {
         assertThat(sessionHandshakeInterceptor).isNotNull();
         assertThat(chatChannelInterceptor).isNotNull();
+        assertThat(notificationChannelInterceptor).isNotNull();
     }
 
     @Test

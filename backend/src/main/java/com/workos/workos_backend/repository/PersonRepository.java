@@ -1,5 +1,6 @@
 package com.workos.workos_backend.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,6 +11,14 @@ import com.workos.workos_backend.entity.Person;
 public interface PersonRepository extends JpaRepository<Person, String> {
 
     Optional<Person> findByEmail(String email);
+
+    /**
+     * The management recipient set for the self-notification rule (spec
+     * section 18) — every {@link Person} whose persisted {@code accessRole}
+     * is one of the given roles (typically CEO/HR/Operation Manager). See
+     * {@link com.workos.workos_backend.service.NotificationService#notify}.
+     */
+    List<Person> findByAccessRoleIn(Collection<String> accessRoles);
 
     /**
      * Rows with a non-null {@code accessRole} are exactly the employee

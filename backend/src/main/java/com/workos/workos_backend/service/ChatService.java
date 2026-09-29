@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.workos.workos_backend.dto.ChatMessageResponse;
 import com.workos.workos_backend.entity.ChatMessage;
+import com.workos.workos_backend.entity.NotificationEventType;
 import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.exception.ForbiddenException;
 import com.workos.workos_backend.repository.ChatMessageRepository;
@@ -33,14 +34,17 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final PersonRepository personRepository;
     private final ChatMessageBroadcaster broadcaster;
+    private final NotificationService notificationService;
 
     public ChatService(
             ChatMessageRepository chatMessageRepository,
             PersonRepository personRepository,
-            ChatMessageBroadcaster broadcaster) {
+            ChatMessageBroadcaster broadcaster,
+            NotificationService notificationService) {
         this.chatMessageRepository = chatMessageRepository;
         this.personRepository = personRepository;
         this.broadcaster = broadcaster;
+        this.notificationService = notificationService;
     }
 
     /** Mirrors {@code canAccessConversation} in the frontend's {@code chat-repository.ts} exactly. */
@@ -76,6 +80,7 @@ public class ChatService {
         // ChatMessage has the same assigned-id Persistable.isNew() behavior.
         ChatMessage saved = chatMessageRepository.saveAndFlush(message);
         broadcaster.publish(conversationId, ChatMessageResponse.from(saved));
+        notificationService.notify(actorId, NotificationEventType.CHAT_MESSAGE, author.getName() + " sent a message.");
         return saved;
     }
 

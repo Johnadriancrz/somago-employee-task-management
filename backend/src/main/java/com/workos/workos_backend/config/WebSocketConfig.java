@@ -13,6 +13,7 @@ import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 import com.workos.workos_backend.websocket.ChatChannelInterceptor;
+import com.workos.workos_backend.websocket.NotificationChannelInterceptor;
 import com.workos.workos_backend.websocket.SessionHandshakeInterceptor;
 
 /**
@@ -41,6 +42,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final SessionHandshakeInterceptor sessionHandshakeInterceptor;
     private final ChatChannelInterceptor chatChannelInterceptor;
+    private final NotificationChannelInterceptor notificationChannelInterceptor;
     private final String[] allowedOrigins;
 
     public WebSocketConfig(
@@ -53,9 +55,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             // chain until the interceptor is actually invoked, instead of
             // during this bean's own construction.
             @Lazy ChatChannelInterceptor chatChannelInterceptor,
+            // NotificationChannelInterceptor has no dependencies of its own,
+            // so it doesn't need the same @Lazy treatment.
+            NotificationChannelInterceptor notificationChannelInterceptor,
             @Value("${app.cors.allowed-origins}") String allowedOrigins) {
         this.sessionHandshakeInterceptor = sessionHandshakeInterceptor;
         this.chatChannelInterceptor = chatChannelInterceptor;
+        this.notificationChannelInterceptor = notificationChannelInterceptor;
         List<String> origins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isEmpty())
@@ -77,6 +83,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(chatChannelInterceptor);
+        registration.interceptors(chatChannelInterceptor, notificationChannelInterceptor);
     }
 }

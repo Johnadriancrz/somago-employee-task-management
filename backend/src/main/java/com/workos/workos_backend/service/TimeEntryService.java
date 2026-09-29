@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.workos.workos_backend.authorization.AccessRoleChecker;
 import com.workos.workos_backend.authorization.AccessRoles;
+import com.workos.workos_backend.entity.NotificationEventType;
 import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.TimeEntry;
 import com.workos.workos_backend.exception.ConflictException;
@@ -43,12 +44,14 @@ public class TimeEntryService {
     private final TimeEntryRepository timeEntryRepository;
     private final PersonRepository personRepository;
     private final AccessRoleChecker accessRoleChecker;
+    private final NotificationService notificationService;
 
     public TimeEntryService(TimeEntryRepository timeEntryRepository, PersonRepository personRepository,
-            AccessRoleChecker accessRoleChecker) {
+            AccessRoleChecker accessRoleChecker, NotificationService notificationService) {
         this.timeEntryRepository = timeEntryRepository;
         this.personRepository = personRepository;
         this.accessRoleChecker = accessRoleChecker;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -64,7 +67,9 @@ public class TimeEntryService {
         TimeEntry entry = new TimeEntry(UUID.randomUUID().toString(), person, Instant.now());
         // saveAndFlush: see the matching comment in WorkspaceService.createWorkspace —
         // TimeEntry has the same assigned-id Persistable.isNew() behavior.
-        return timeEntryRepository.saveAndFlush(entry);
+        TimeEntry saved = timeEntryRepository.saveAndFlush(entry);
+        notificationService.notify(actorId, NotificationEventType.CLOCK_IN, person.getName() + " clocked in.");
+        return saved;
     }
 
     @Transactional
@@ -72,7 +77,9 @@ public class TimeEntryService {
         TimeEntry entry = timeEntryRepository.findByPersonIdAndClockOutIsNull(actorId)
                 .orElseThrow(() -> new ConflictException("Not clocked in"));
         entry.setClockOut(Instant.now());
-        return timeEntryRepository.save(entry);
+        TimeEntry saved = timeEntryRepository.save(entry);
+        notificationService.notify(actorId, NotificationEventType.CLOCK_OUT, entry.getPerson().getName() + " clocked out.");
+        return saved;
     }
 
     @Transactional(readOnly = true)

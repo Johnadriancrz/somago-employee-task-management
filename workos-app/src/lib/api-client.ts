@@ -7,6 +7,7 @@ import type {
   NewBoardInput,
   NewTaskInput,
   NewWorkspaceInput,
+  Notification,
   Person,
   Task,
   TimeEntry,
@@ -330,6 +331,30 @@ export function fetchTimeEntries(personId?: string): Promise<TimeEntry[]> {
  */
 export function fetchCompletedTasks(): Promise<CompletedTaskReport[]> {
   return springRequest("/api/reports/completed-tasks");
+}
+
+// Notifications
+//
+// Goes straight to the Spring Boot backend (NotificationController, spec
+// section 18) — the recipient is always the server-resolved actor from the
+// session cookie, never a client-supplied id. Live delivery is over STOMP
+// (see `lib/notification-socket.ts`); these are the REST hydration/reconcile
+// side of that same data.
+
+export function fetchNotifications(): Promise<Notification[]> {
+  return springRequest("/api/notifications");
+}
+
+export function fetchUnreadNotificationCount(): Promise<number> {
+  return springRequest<{ count: number }>("/api/notifications/unread-count").then((res) => res.count);
+}
+
+export function markNotificationReadRequest(notificationId: string): Promise<Notification> {
+  return springRequest(`/api/notifications/${notificationId}/read`, { method: "PATCH" });
+}
+
+export function markAllNotificationsReadRequest(): Promise<void> {
+  return springRequest("/api/notifications/read-all", { method: "PATCH" });
 }
 
 // Admin — a fully separate login/session from the workspace-user auth above.

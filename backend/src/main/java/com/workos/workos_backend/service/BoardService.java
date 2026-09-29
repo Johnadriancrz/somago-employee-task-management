@@ -8,10 +8,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.workos.workos_backend.entity.BoardIcon;
 import com.workos.workos_backend.entity.BoardMeta;
+import com.workos.workos_backend.entity.NotificationEventType;
+import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.Workspace;
 import com.workos.workos_backend.exception.ForbiddenException;
 import com.workos.workos_backend.exception.ResourceNotFoundException;
 import com.workos.workos_backend.repository.BoardMetaRepository;
+import com.workos.workos_backend.repository.PersonRepository;
 import com.workos.workos_backend.repository.WorkspaceRepository;
 
 /**
@@ -24,10 +27,15 @@ public class BoardService {
 
     private final BoardMetaRepository boardMetaRepository;
     private final WorkspaceRepository workspaceRepository;
+    private final PersonRepository personRepository;
+    private final NotificationService notificationService;
 
-    public BoardService(BoardMetaRepository boardMetaRepository, WorkspaceRepository workspaceRepository) {
+    public BoardService(BoardMetaRepository boardMetaRepository, WorkspaceRepository workspaceRepository,
+            PersonRepository personRepository, NotificationService notificationService) {
         this.boardMetaRepository = boardMetaRepository;
         this.workspaceRepository = workspaceRepository;
+        this.personRepository = personRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -56,7 +64,12 @@ public class BoardService {
                 icon);
         // saveAndFlush: see the matching comment in WorkspaceService.createWorkspace —
         // BoardMeta has the same assigned-id Persistable.isNew() behavior.
-        return boardMetaRepository.saveAndFlush(board);
+        BoardMeta saved = boardMetaRepository.saveAndFlush(board);
+        Person actor = personRepository.findById(actorId)
+                .orElseThrow(() -> new IllegalStateException("Acting person not found: " + actorId));
+        notificationService.notify(actorId, NotificationEventType.BOARD_CREATED,
+                actor.getName() + " created a board \"" + saved.getName() + "\".");
+        return saved;
     }
 
     @Transactional

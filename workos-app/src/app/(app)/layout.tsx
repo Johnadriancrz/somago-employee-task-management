@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { BoardProvider } from "@/lib/store";
 import { ClockProvider } from "@/lib/clock";
+import { NotificationProvider } from "@/lib/notifications";
 import { RailProvider } from "@/lib/rail";
 import { ConfirmProvider } from "@/lib/confirm";
 import { TaskDetailPanel } from "@/components/panels/TaskDetailPanel";
@@ -15,13 +16,15 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
   return (
     <BoardProvider>
       <ClockProvider>
-        <RailProvider>
-          <ConfirmProvider>
-            {children}
-            <TaskDetailPanel />
-            <ClockInPrompt />
-          </ConfirmProvider>
-        </RailProvider>
+        <NotificationProvider>
+          <RailProvider>
+            <ConfirmProvider>
+              {children}
+              <TaskDetailPanel />
+              <ClockInPrompt />
+            </ConfirmProvider>
+          </RailProvider>
+        </NotificationProvider>
       </ClockProvider>
     </BoardProvider>
   );

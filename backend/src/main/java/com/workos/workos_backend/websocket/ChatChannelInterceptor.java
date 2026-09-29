@@ -48,10 +48,18 @@ public class ChatChannelInterceptor implements ChannelInterceptor {
             // without re-checking the server-established identity is there.
             requirePersonId(accessor);
         } else if (command == StompCommand.SUBSCRIBE) {
-            String personId = requirePersonId(accessor);
-            String conversationId = conversationIdFrom(accessor.getDestination());
-            if (conversationId == null || !chatService.canAccess(personId, conversationId)) {
-                throw new ForbiddenException("Not a participant in this conversation");
+            // Scoped to chat destinations only: other topics (e.g.
+            // /topic/notifications/{personId}) are authorized by their own
+            // interceptor further down the chain (see
+            // NotificationChannelInterceptor) — this must not reject a
+            // SUBSCRIBE to a destination it isn't responsible for.
+            String destination = accessor.getDestination();
+            if (destination != null && destination.startsWith(ChatMessageBroadcaster.STOMP_DESTINATION_PREFIX)) {
+                String personId = requirePersonId(accessor);
+                String conversationId = conversationIdFrom(destination);
+                if (conversationId == null || !chatService.canAccess(personId, conversationId)) {
+                    throw new ForbiddenException("Not a participant in this conversation");
+                }
             }
         }
 

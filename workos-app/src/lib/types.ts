@@ -143,6 +143,28 @@ export interface CompletedTaskReport {
   end: string;
 }
 
+/** Matches NotificationEventType on the backend exactly — spec section 18. */
+export type NotificationEventType =
+  | "CHAT_MESSAGE"
+  | "CLOCK_IN"
+  | "CLOCK_OUT"
+  | "TASK_WORKING"
+  | "TASK_STUCK"
+  | "TASK_DONE"
+  | "BOARD_CREATED";
+
+/** Matches NotificationResponse on the backend exactly (both the REST list and the STOMP payload). */
+export interface Notification {
+  id: string;
+  eventType: NotificationEventType;
+  actorId: string;
+  actorName: string;
+  message: string;
+  read: boolean;
+  /** ISO datetime. */
+  createdAt: string;
+}
+
 export const STATUS_LABEL: Record<Status, string> = {
   "not-started": "Not Started",
   working: "Working on it",

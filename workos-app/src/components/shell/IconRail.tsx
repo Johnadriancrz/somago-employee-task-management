@@ -17,6 +17,7 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 import { useRail } from "@/lib/rail";
+import { useNotifications } from "@/lib/notifications";
 
 const TOP_ITEMS = [
   { icon: LayoutGrid, label: "Workspaces", href: "/" },
@@ -37,6 +38,7 @@ const BOTTOM_ITEMS = [
 export function IconRail() {
   const pathname = usePathname();
   const { expanded, toggle } = useRail();
+  const { unreadCount } = useNotifications();
 
   return (
     <aside
@@ -54,6 +56,7 @@ export function IconRail() {
         <nav className="flex flex-col gap-1.5 w-full">
           {TOP_ITEMS.map(({ icon: Icon, label, href }) => {
             const active = pathname === href;
+            const showBadge = label === "Notifications" && unreadCount > 0;
             return (
               <Link
                 key={label}
@@ -67,7 +70,14 @@ export function IconRail() {
                     : "text-inverse-on-surface/70 hover:bg-white/10 hover:text-inverse-on-surface"
                 }`}
               >
-                <Icon size={18} className="shrink-0" />
+                <span className="relative shrink-0 flex items-center justify-center">
+                  <Icon size={18} className="shrink-0" />
+                  {showBadge && (
+                    <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-error text-on-error text-[10px] leading-4 text-center font-semibold">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                </span>
                 {expanded && <span className="text-label-md truncate">{label}</span>}
               </Link>
             );

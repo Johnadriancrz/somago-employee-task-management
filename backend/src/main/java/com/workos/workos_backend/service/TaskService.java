@@ -19,6 +19,7 @@ import com.workos.workos_backend.dto.SubtaskInput;
 import com.workos.workos_backend.dto.UpdateTaskRequest;
 import com.workos.workos_backend.entity.Attachment;
 import com.workos.workos_backend.entity.BoardMeta;
+import com.workos.workos_backend.entity.NotificationEventType;
 import com.workos.workos_backend.entity.Person;
 import com.workos.workos_backend.entity.Subtask;
 import com.workos.workos_backend.entity.Task;
@@ -70,14 +71,17 @@ public class TaskService {
     private final PersonRepository personRepository;
     private final BoardService boardService;
     private final AccessRoleChecker accessRoleChecker;
+    private final NotificationService notificationService;
 
     public TaskService(TaskRepository taskRepository, BoardMetaRepository boardMetaRepository,
-            PersonRepository personRepository, BoardService boardService, AccessRoleChecker accessRoleChecker) {
+            PersonRepository personRepository, BoardService boardService, AccessRoleChecker accessRoleChecker,
+            NotificationService notificationService) {
         this.taskRepository = taskRepository;
         this.boardMetaRepository = boardMetaRepository;
         this.personRepository = personRepository;
         this.accessRoleChecker = accessRoleChecker;
         this.boardService = boardService;
+        this.notificationService = notificationService;
     }
 
     /** GET /api/tasks — every board the actor belongs to gets a key, even with an empty task list (matches the stub's ensureBoard() behavior). */
@@ -172,6 +176,8 @@ public class TaskService {
             throw new ForbiddenException("Only CEO or Operation Manager can assign or reassign work");
         }
 
+        TaskStatus previousStatus = task.getStatus();
+
         // Core fields (reachable only if isOwner, or none were attempted).
         if (patch.title() != null) {
             if (patch.title().isBlank()) {
@@ -238,7 +244,11 @@ public class TaskService {
             task.setUpdatedAt(patch.updatedAt());
         }
 
-        return taskRepository.save(task);
+        Task saved = taskRepository.save(task);
+        if (patch.status() != null && task.getStatus() != previousStatus) {
+            notifyStatusChange(actorId, task);
+        }
+        return saved;
     }
 
     @Transactional
@@ -266,6 +276,23 @@ public class TaskService {
     /** Spec section 11: only CEO and Operation Manager may assign or reassign work. */
     private boolean canAssignWork(String actorId) {
         return accessRoleChecker.actorHasAnyRole(actorId, AccessRoles.CEO, AccessRoles.OPERATION_MANAGER);
+    }
+
+    /** Spec section 18: a status change into working/stuck/done fans out a notification; NOT_STARTED is not one of the notified events. */
+    private void notifyStatusChange(String actorId, Task task) {
+        NotificationEventType eventType = switch (task.getStatus()) {
+            case WORKING -> NotificationEventType.TASK_WORKING;
+            case STUCK -> NotificationEventType.TASK_STUCK;
+            case DONE -> NotificationEventType.TASK_DONE;
+            case NOT_STARTED -> null;
+        };
+        if (eventType == null) {
+            return;
+        }
+        Person actor = personRepository.findById(actorId)
+                .orElseThrow(() -> new IllegalStateException("Acting person not found: " + actorId));
+        notificationService.notify(actorId, eventType,
+                actor.getName() + " marked \"" + task.getTitle() + "\" as " + task.getStatus().getValue() + ".");
     }
 
     private Person resolvePerson(String personId) {
