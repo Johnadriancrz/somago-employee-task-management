@@ -88,6 +88,43 @@ class WorkspaceServiceTest {
     }
 
     @Test
+    void ceoSeesEveryWorkspaceRegardlessOfOwnershipOrMembership() {
+        Workspace unrelated = workspaceService.createWorkspace("alex-morgan", "Not CEOs", "NC");
+        String ceoId = newCeo();
+
+        // The CEO is neither the owner nor a member of this workspace at all
+        // (spec section 12: CEO sees every workspace).
+        assertThat(workspaceService.listVisibleWorkspaces(ceoId))
+                .extracting(Workspace::getId).contains(unrelated.getId());
+    }
+
+    @Test
+    void ceoStillSeesWorkspacesTheyOwnOrBelongTo() {
+        String ceoId = newCeo();
+        Workspace owned = workspaceService.createWorkspace(ceoId, "CEO Owned", "CO");
+        Workspace memberOf = workspaceService.createWorkspace("sarah-chen", "CEO Member Of", "CM");
+        workspaceService.addMember("sarah-chen", memberOf.getId(), ceoId);
+
+        assertThat(workspaceService.listVisibleWorkspaces(ceoId))
+                .extracting(Workspace::getId).contains(owned.getId(), memberOf.getId());
+    }
+
+    @Test
+    void operationManagerListVisibilityRemainsOwnerOrMemberOnly() {
+        String omId = accountService.createAccount(
+                "OM", "om-" + UUID.randomUUID() + "@workos.dev", "Password123!", "Operation Manager").getId();
+        Workspace owned = workspaceService.createWorkspace(omId, "OM Owned", "OO");
+        Workspace unrelated = workspaceService.createWorkspace("alex-morgan", "Not OMs", "NO");
+
+        // Spec section 12/20 item 5: OM's broader "workspaces they manage"
+        // scope beyond ones they own/belong to is intentionally not applied
+        // to visibility here — same open decision as addMember/removeMember.
+        assertThat(workspaceService.listVisibleWorkspaces(omId))
+                .extracting(Workspace::getId).contains(owned.getId())
+                .doesNotContain(unrelated.getId());
+    }
+
+    @Test
     void deleteWorkspaceRequiresOwner() {
         Workspace workspace = workspaceService.createWorkspace("sarah-chen", "Product Eng", "PE");
         workspaceService.addMember("sarah-chen", workspace.getId(), "alex-morgan");

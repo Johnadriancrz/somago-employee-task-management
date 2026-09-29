@@ -70,3 +70,18 @@ export function canAssignWork(accessRole: string | null | undefined): boolean {
 export function canManageAllWorkspaces(accessRole: string | null | undefined): boolean {
   return hasAccessRole(accessRole, "CEO");
 }
+
+/**
+ * Whether the signed-in actor may add/remove members on this specific
+ * workspace: a CEO (any workspace) or its owner. Deliberately separate from
+ * *visibility* — every workspace an actor can see (owned, member-of, or all
+ * of them for a CEO) is not necessarily one they can manage. Mirrors
+ * `WorkspaceService.addMember`/`removeMember`'s owner-or-CEO gate.
+ */
+export function canManageWorkspace(
+  accessRole: string | null | undefined,
+  workspace: { ownerId: string },
+  userId: string | null | undefined,
+): boolean {
+  return canManageAllWorkspaces(accessRole) || workspace.ownerId === userId;
+}

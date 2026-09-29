@@ -105,6 +105,34 @@ class WorkspaceControllerTest {
     }
 
     @Test
+    void listReturnsEveryWorkspaceForCeoIncludingOnesTheyDoNotOwnOrBelongTo() {
+        Workspace ownedBySarah = workspaceService.createWorkspace("sarah-chen", "Sarahs", "SA");
+        Workspace unrelated = workspaceService.createWorkspace("alex-morgan", "Alex Only", "AO");
+        grantSarahChenAccessRole("CEO");
+
+        MvcTestResult result = mvc.get().uri("/api/workspaces").exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result).bodyJson().extractingPath("$[?(@.id=='" + ownedBySarah.getId() + "')]").asArray()
+                .hasSize(1);
+        assertThat(result).bodyJson().extractingPath("$[?(@.id=='" + unrelated.getId() + "')]").asArray()
+                .hasSize(1);
+    }
+
+    @Test
+    void listRemainsOwnerOrMemberScopedForOperationManager() {
+        grantSarahChenAccessRole("Operation Manager");
+        Workspace owned = workspaceService.createWorkspace("sarah-chen", "Sarahs OM Ws", "SO");
+        Workspace unrelated = workspaceService.createWorkspace("alex-morgan", "Not Sarahs", "NS");
+
+        MvcTestResult result = mvc.get().uri("/api/workspaces").exchange();
+
+        assertThat(result).hasStatusOk();
+        assertThat(result).bodyJson().extractingPath("$[?(@.id=='" + owned.getId() + "')]").asArray().hasSize(1);
+        assertThat(result).bodyJson().extractingPath("$[?(@.id=='" + unrelated.getId() + "')]").asArray().isEmpty();
+    }
+
+    @Test
     void deleteReturnsOkForOwner() {
         Workspace workspace = workspaceService.createWorkspace("sarah-chen", "To Delete", "TD");
 

@@ -48,9 +48,21 @@ public class WorkspaceService {
      * Every workspace the given person owns or is a member of. Since the
      * owner is always persisted as a member too (Workspace's own invariant),
      * membership alone covers both halves of "owns or is a member of".
+     *
+     * <p>CEO is the one exception (spec section 12, Members Module Audit):
+     * every workspace is visible to a CEO regardless of ownership or
+     * membership, matching the existing CEO add/remove bypass in
+     * {@link #addMember} / {@link #removeMember}. Operation Manager's
+     * broader "workspaces they're authorized to manage" scope remains an
+     * open product decision and is intentionally not applied to visibility
+     * here — an Operation Manager still only sees owned/member-of
+     * workspaces, unchanged.
      */
     @Transactional(readOnly = true)
     public List<Workspace> listVisibleWorkspaces(String actorId) {
+        if (accessRoleChecker.actorHasAnyRole(actorId, AccessRoles.CEO)) {
+            return workspaceRepository.findAll();
+        }
         return workspaceRepository.findByMembersId(actorId);
     }
 

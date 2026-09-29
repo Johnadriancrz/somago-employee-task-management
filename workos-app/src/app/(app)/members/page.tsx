@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Crown, Plus, X } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
@@ -10,17 +10,19 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/lib/confirm";
 import { useAuth } from "@/lib/auth";
-import { canManageAllWorkspaces } from "@/lib/roles";
+import { canManageAllWorkspaces, canManageWorkspace } from "@/lib/roles";
 import { useBoard } from "@/lib/store";
 import type { Person, Workspace } from "@/lib/types";
 
 /**
- * Only the account that created a workspace ("head account") can manage who's
- * in it, so this page is scoped to workspaces the signed-in person owns —
- * one card per workspace, each with its own roster and add-person control.
- * CEO is the one exception (spec section 12): every workspace is visible
- * and manageable here, matching `WorkspaceService.addMember`/`removeMember`'s
- * additive owner-bypass on the backend.
+ * Visibility and management are separate concerns here (Members Module
+ * Audit): `workspaces` from useBoard() is already the backend's authoritative
+ * visible-workspace list for the signed-in actor — owned-or-member-of for
+ * everyone, every workspace for a CEO (`WorkspaceService.listVisibleWorkspaces`).
+ * This page just renders that list; it never re-filters it back down to
+ * ownerId === user.id. Per-workspace *management* (add/remove) stays
+ * restricted to the owner or a CEO, matching `WorkspaceService.addMember`/
+ * `removeMember`'s existing owner-or-CEO gate on the backend.
  */
 export default function MembersPage() {
   const { user } = useAuth();
@@ -28,12 +30,11 @@ export default function MembersPage() {
   const confirm = useConfirm();
   const [addDialogWorkspaceId, setAddDialogWorkspaceId] = useState<string | null>(null);
   const manageAll = canManageAllWorkspaces(user?.accessRole);
+  const userId = user?.id;
 
-  const ownedWorkspaces = useMemo(
-    () => (manageAll ? workspaces : workspaces.filter((w) => w.ownerId === user?.id)),
-    [workspaces, user?.id, manageAll],
-  );
-  const activeDialogWorkspace = ownedWorkspaces.find((w) => w.id === addDialogWorkspaceId) ?? null;
+  const activeDialogWorkspace =
+    workspaces.find((w) => w.id === addDialogWorkspaceId && canManageWorkspace(user?.accessRole, w, userId)) ??
+    null;
 
   const handleRemove = async (workspace: Workspace, person: Person) => {
     const ok = await confirm({
@@ -52,25 +53,29 @@ export default function MembersPage() {
           <PageHeader
             title="Members"
             description={
-              ownedWorkspaces.length === 0
-                ? "You haven't created a workspace yet."
+              workspaces.length === 0
+                ? manageAll
+                  ? "No workspaces have been created yet."
+                  : "You don't belong to any workspaces yet."
                 : manageAll
                   ? "Every workspace (CEO access) — add or remove the accounts that can see and work in them."
-                  : "Workspaces you created — add or remove the accounts that can see and work in them."
+                  : "Workspaces you belong to. You can add or remove accounts on ones you own."
             }
           />
 
-          {ownedWorkspaces.length === 0 ? (
+          {workspaces.length === 0 ? (
             <Panel className="text-center py-space-xl">
               <p className="text-body-sm text-secondary">
-                Only the account that creates a workspace can manage who&apos;s in it. Create one from
-                the sidebar to get started.
+                {manageAll
+                  ? "Create a workspace from the sidebar to get started."
+                  : "Ask a teammate to add you to a workspace, or create one from the sidebar."}
               </p>
             </Panel>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
-              {ownedWorkspaces.map((workspace) => {
+              {workspaces.map((workspace) => {
                 const members = workspace.memberIds.map(personById);
+                const manageable = canManageWorkspace(user?.accessRole, workspace, userId);
                 return (
                   <Panel key={workspace.id} className="flex flex-col gap-space-md">
                     <div className="flex items-start justify-between gap-space-sm">
@@ -85,10 +90,12 @@ export default function MembersPage() {
                           </p>
                         </div>
                       </div>
-                      <Button variant="primary" onClick={() => setAddDialogWorkspaceId(workspace.id)}>
-                        <Plus size={14} />
-                        Add
-                      </Button>
+                      {manageable && (
+                        <Button variant="primary" onClick={() => setAddDialogWorkspaceId(workspace.id)}>
+                          <Plus size={14} />
+                          Add
+                        </Button>
+                      )}
                     </div>
 
                     <div className="rounded-lg bg-surface-subtle divide-y divide-border-subtle overflow-hidden">
@@ -104,7 +111,7 @@ export default function MembersPage() {
                             </p>
                             <p className="text-caption text-secondary truncate">{person.email}</p>
                           </div>
-                          {person.id !== workspace.ownerId && (
+                          {manageable && person.id !== workspace.ownerId && (
                             <button
                               onClick={() => handleRemove(workspace, person)}
                               title="Remove from workspace"

@@ -119,11 +119,13 @@ Membership is a real access boundary, not just a UI label: every endpoint
 below (and every board/task endpoint further down) is scoped to workspaces
 the signed-in person owns or is a member of. A non-member gets a workspace
 left out of `GET /api/workspaces` entirely, and 403s if they try to touch its
-boards/tasks/members directly by id.
+boards/tasks/members directly by id. CEO is the one exception: `GET
+/api/workspaces` returns every workspace for a CEO, regardless of ownership
+or membership.
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| GET | `/api/workspaces` | — | `Workspace[]` — only workspaces the signed-in person owns or is a member of |
+| GET | `/api/workspaces` | — | `Workspace[]` — workspaces the signed-in person owns or is a member of; every workspace, for a CEO |
 | POST | `/api/workspaces` | `{ name: string; initials?: string }` | created `Workspace` (201) — the signed-in person becomes `ownerId` and its sole initial member; `initials` auto-derived from `name` if omitted |
 | DELETE | `/api/workspaces/:workspaceId` | — | `{ ok: true }` — owner only (403 otherwise); also deletes every board and task in it |
 | POST | `/api/workspaces/:workspaceId/members` | `{ personId: string }` | updated `Workspace` — owner only (403 otherwise); `personId` must be an existing account (404 otherwise) |
