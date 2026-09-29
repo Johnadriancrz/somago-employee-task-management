@@ -83,6 +83,13 @@ class SessionAuthenticationIntegrationTest {
     }
 
     @Test
+    void notificationPreferencesEndpointRejectsARequestWithNoSessionCookieWith401() {
+        MvcTestResult result = mvc.get().uri("/api/notification-preferences").exchange();
+
+        assertThat(result).hasStatus(401);
+    }
+
+    @Test
     void taskPatchEndpointRejectsARequestWithNoSessionCookieWith401() {
         MvcTestResult result = mvc.patch().uri("/api/tasks/does-not-matter")
                 .contentType(MediaType.APPLICATION_JSON)

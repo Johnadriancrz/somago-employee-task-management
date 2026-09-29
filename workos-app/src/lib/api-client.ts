@@ -8,6 +8,7 @@ import type {
   NewTaskInput,
   NewWorkspaceInput,
   Notification,
+  NotificationPreferences,
   Person,
   Task,
   TimeEntry,
@@ -355,6 +356,26 @@ export function markNotificationReadRequest(notificationId: string): Promise<Not
 
 export function markAllNotificationsReadRequest(): Promise<void> {
   return springRequest("/api/notifications/read-all", { method: "PATCH" });
+}
+
+// Notification preferences (Settings Phase S1)
+//
+// Goes straight to the Spring Boot backend (NotificationPreferenceController)
+// — the person whose preferences are read/written is always the
+// session-resolved actor, never a client-supplied id. Purely persisted
+// toggle state; does not affect notification delivery in this phase.
+
+export function fetchNotificationPreferences(): Promise<NotificationPreferences> {
+  return springRequest("/api/notification-preferences");
+}
+
+export function updateNotificationPreferencesRequest(
+  patch: Partial<NotificationPreferences>,
+): Promise<NotificationPreferences> {
+  return springRequest("/api/notification-preferences", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }
 
 // Admin — a fully separate login/session from the workspace-user auth above.

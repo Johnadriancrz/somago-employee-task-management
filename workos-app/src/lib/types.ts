@@ -165,6 +165,19 @@ export interface Notification {
   createdAt: string;
 }
 
+/**
+ * The four Settings notification toggles (Settings Phase S1). Matches
+ * NotificationPreferencesResponse on the backend exactly. This is persisted
+ * preference state only — it does not yet drive any notification delivery
+ * behavior.
+ */
+export interface NotificationPreferences {
+  mentionsEnabled: boolean;
+  taskAssignedEnabled: boolean;
+  dueSoonEnabled: boolean;
+  weeklyDigestEnabled: boolean;
+}
+
 export const STATUS_LABEL: Record<Status, string> = {
   "not-started": "Not Started",
   working: "Working on it",

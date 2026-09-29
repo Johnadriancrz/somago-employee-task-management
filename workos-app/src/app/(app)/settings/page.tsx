@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Eye, EyeOff, LogOut } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
@@ -12,14 +12,22 @@ import { Switch } from "@/components/ui/Switch";
 import { useBoard } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useConfirm } from "@/lib/confirm";
-import { changePasswordRequest } from "@/lib/api-client";
-import type { Person, Workspace } from "@/lib/types";
+import {
+  changePasswordRequest,
+  fetchNotificationPreferences,
+  updateNotificationPreferencesRequest,
+} from "@/lib/api-client";
+import type { NotificationPreferences, Person, Workspace } from "@/lib/types";
 
-const NOTIFICATION_PREFS = [
-  { id: "mentions", label: "Mentions", description: "When someone mentions you in an update." },
-  { id: "assigned", label: "Task assigned to me", description: "When a task's owner changes to you." },
-  { id: "due-soon", label: "Due soon reminders", description: "A reminder 2 days before a task is due." },
-  { id: "digest", label: "Weekly digest", description: "A summary email every Monday morning." },
+const NOTIFICATION_PREFS: {
+  id: keyof NotificationPreferences;
+  label: string;
+  description: string;
+}[] = [
+  { id: "mentionsEnabled", label: "Mentions", description: "When someone mentions you in an update." },
+  { id: "taskAssignedEnabled", label: "Task assigned to me", description: "When a task's owner changes to you." },
+  { id: "dueSoonEnabled", label: "Due soon reminders", description: "A reminder 2 days before a task is due." },
+  { id: "weeklyDigestEnabled", label: "Weekly digest", description: "A summary email every Monday morning." },
 ];
 
 export default function SettingsPage() {
@@ -27,12 +35,6 @@ export default function SettingsPage() {
   const { user, logout, updateProfile } = useAuth();
   const confirm = useConfirm();
   const router = useRouter();
-  const [prefs, setPrefs] = useState<Record<string, boolean>>({
-    mentions: true,
-    assigned: true,
-    "due-soon": true,
-    digest: false,
-  });
 
   return (
     <AppShell>
@@ -83,20 +85,7 @@ export default function SettingsPage() {
 
           <Panel className="flex flex-col gap-space-md">
             <h2 className="text-headline-sm text-on-surface">Notifications</h2>
-            <div className="flex flex-col divide-y divide-border-subtle">
-              {NOTIFICATION_PREFS.map((pref) => (
-                <div key={pref.id} className="flex items-center justify-between py-space-sm first:pt-0 last:pb-0">
-                  <div>
-                    <p className="text-body-sm text-on-surface">{pref.label}</p>
-                    <p className="text-caption text-secondary">{pref.description}</p>
-                  </div>
-                  <Switch
-                    checked={prefs[pref.id]}
-                    onChange={(checked) => setPrefs((prev) => ({ ...prev, [pref.id]: checked }))}
-                  />
-                </div>
-              ))}
-            </div>
+            <NotificationPreferencesSection />
           </Panel>
 
           <ResetDemoDataPanel resetAllData={resetAllData} confirm={confirm} />
@@ -214,6 +203,85 @@ function ProfileFields({
         </Button>
       </div>
     </>
+  );
+}
+
+function NotificationPreferencesSection() {
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<keyof NotificationPreferences | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchNotificationPreferences()
+      .then((result) => {
+        if (cancelled) return;
+        setPrefs(result);
+        setLoadError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : "Failed to load notification preferences");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleToggle = async (id: keyof NotificationPreferences, checked: boolean) => {
+    if (!prefs) return;
+    const previous = prefs;
+    setSaveError(null);
+    setSavingId(id);
+    setPrefs({ ...prefs, [id]: checked });
+    try {
+      const updated = await updateNotificationPreferencesRequest({ [id]: checked });
+      setPrefs(updated);
+    } catch (err) {
+      // Do not pretend the save succeeded: revert the optimistic toggle and surface the error.
+      setPrefs(previous);
+      setSaveError(err instanceof Error ? err.message : "Failed to save notification preference");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  if (loading) {
+    return <p className="text-body-sm text-secondary">Loading notification preferences…</p>;
+  }
+
+  if (loadError || !prefs) {
+    return (
+      <p className="text-body-sm text-status-stuck bg-status-stuck/10 rounded-lg px-space-sm py-2">
+        {loadError ?? "Failed to load notification preferences"}
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-space-sm">
+      {saveError && (
+        <p className="text-body-sm text-status-stuck bg-status-stuck/10 rounded-lg px-space-sm py-2">{saveError}</p>
+      )}
+      <div className="flex flex-col divide-y divide-border-subtle">
+        {NOTIFICATION_PREFS.map((pref) => (
+          <div key={pref.id} className="flex items-center justify-between py-space-sm first:pt-0 last:pb-0">
+            <div>
+              <p className="text-body-sm text-on-surface">{pref.label}</p>
+              <p className="text-caption text-secondary">{pref.description}</p>
+            </div>
+            <div className={savingId === pref.id ? "opacity-50 pointer-events-none" : undefined}>
+              <Switch checked={prefs[pref.id]} onChange={(checked) => handleToggle(pref.id, checked)} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchCompletedTasks,
+  fetchNotificationPreferences,
   fetchNotifications,
   fetchUnreadNotificationCount,
   markAllNotificationsReadRequest,
   markNotificationReadRequest,
   SPRING_API_BASE_URL,
+  updateNotificationPreferencesRequest,
 } from "./api-client";
-import type { CompletedTaskReport, Notification } from "./types";
+import type { CompletedTaskReport, Notification, NotificationPreferences } from "./types";
 
 function completedTask(overrides: Partial<CompletedTaskReport> = {}): CompletedTaskReport {
   return {
@@ -147,6 +149,74 @@ describe("Notifications API", () => {
     expect(fetch).toHaveBeenCalledWith(
       `${SPRING_API_BASE_URL}/api/notifications/read-all`,
       expect.objectContaining({ method: "PATCH", credentials: "include" }),
+    );
+  });
+});
+
+function notificationPreferences(overrides: Partial<NotificationPreferences> = {}): NotificationPreferences {
+  return {
+    mentionsEnabled: true,
+    taskAssignedEnabled: true,
+    dueSoonEnabled: true,
+    weeklyDigestEnabled: false,
+    ...overrides,
+  };
+}
+
+describe("Notification preferences API (Settings Phase S1)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetchNotificationPreferences requests GET /api/notification-preferences on the Spring backend, with credentials", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => notificationPreferences(),
+    });
+
+    const result = await fetchNotificationPreferences();
+
+    expect(fetch).toHaveBeenCalledWith(
+      `${SPRING_API_BASE_URL}/api/notification-preferences`,
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(result).toEqual(notificationPreferences());
+  });
+
+  it("updateNotificationPreferencesRequest PATCHes /api/notification-preferences with only the changed field", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => notificationPreferences({ weeklyDigestEnabled: true }),
+    });
+
+    const result = await updateNotificationPreferencesRequest({ weeklyDigestEnabled: true });
+
+    expect(fetch).toHaveBeenCalledWith(
+      `${SPRING_API_BASE_URL}/api/notification-preferences`,
+      expect.objectContaining({
+        method: "PATCH",
+        credentials: "include",
+        body: JSON.stringify({ weeklyDigestEnabled: true }),
+      }),
+    );
+    expect(result).toEqual(notificationPreferences({ weeklyDigestEnabled: true }));
+  });
+
+  it("rejects (rather than resolving) when the backend responds with a non-OK status, so callers never mistake a failed save for success", async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: "Internal server error" }),
+    });
+
+    await expect(updateNotificationPreferencesRequest({ mentionsEnabled: false })).rejects.toThrow(
+      "Internal server error",
     );
   });
 });
